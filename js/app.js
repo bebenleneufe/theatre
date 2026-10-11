@@ -1280,7 +1280,7 @@
   function describeScreenQuality({ quality, availableQualities }) {
     const playedLabel = formatScreenQuality(quality);
     if (playedLabel === null) {
-      return '';
+      return 'Image sur l’écran : YouTube n’indique pas la définition';
     }
     const bestLabel = availableQualities.map(formatScreenQuality).find((label) => label !== null) ?? null;
     if (bestLabel === null) {
