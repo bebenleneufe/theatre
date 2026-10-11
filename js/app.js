@@ -218,8 +218,9 @@
     return `${YOUTUBE_EMBED_ORIGIN}/embed/${encodeURIComponent(play.youtubeId)}?${playerParameters}`;
   }
 
-  function watchUrl(play) {
-    return `https://www.youtube.com/watch?v=${encodeURIComponent(play.youtubeId)}`;
+  function watchUrl(play, startSeconds = 0) {
+    const startParameter = startSeconds >= 1 ? `&t=${Math.floor(startSeconds)}s` : '';
+    return `https://www.youtube.com/watch?v=${encodeURIComponent(play.youtubeId)}${startParameter}`;
   }
 
   // Le lecteur YouTube diffuse sa position par postMessage (protocole de l'IFrame API).
@@ -1623,6 +1624,10 @@
     #handleWatchLaterClick = () => this.#togglePersonalState((play) => this.#library.toggleWatchLater(play));
     #handleWatchedClick = () => this.#togglePersonalState((play) => this.#library.toggleWatched(play.identifier));
     #handleCastClick = () => this.#toggleCasting();
+    // Le lien s'ouvre dans l'appli YouTube, d'où l'on caste vers la box en
+    // pleine définition : on y passe la position atteinte ici, et Rideau se
+    // tait pour ne pas jouer en double.
+    #handleSourceLinkClick = () => this.#handOverToYouTube();
     #handleLaunchClick = (clickEvent) => {
       const launchButton = clickEvent.target.closest('[data-start-seconds]');
       if (launchButton !== null) {
@@ -1688,6 +1693,7 @@
       this.#watchLaterButton.addEventListener('click', this.#handleWatchLaterClick);
       this.#watchedButton.addEventListener('click', this.#handleWatchedClick);
       this.#castButton.addEventListener('click', this.#handleCastClick);
+      this.#sourceLink.addEventListener('click', this.#handleSourceLinkClick);
       this.#frameWrapper.addEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.addEventListener('close', this.#handleDialogClose);
       this.#dialogElement.addEventListener('click', this.#handleBackdropClick);
@@ -1718,6 +1724,7 @@
       this.#watchLaterButton.removeEventListener('click', this.#handleWatchLaterClick);
       this.#watchedButton.removeEventListener('click', this.#handleWatchedClick);
       this.#castButton.removeEventListener('click', this.#handleCastClick);
+      this.#sourceLink.removeEventListener('click', this.#handleSourceLinkClick);
       this.#frameWrapper.removeEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.removeEventListener('close', this.#handleDialogClose);
       this.#dialogElement.removeEventListener('click', this.#handleBackdropClick);
@@ -1833,6 +1840,21 @@
         this.#playerSnapshot = { seconds: resumeSeconds, durationSeconds: null };
       }
       this.#castSession.start(this.#currentPlay, this.#playerSnapshot?.seconds ?? 0);
+    }
+
+    #handOverToYouTube() {
+      if (this.#currentPlay === null) {
+        return;
+      }
+      const progress = this.#library.getProgress(this.#currentPlay.identifier);
+      const startSeconds = this.#playerSnapshot?.seconds ?? progress?.seconds ?? 0;
+      this.#sourceLink.href = watchUrl(this.#currentPlay, startSeconds);
+      if (this.#castSession.isActive()) {
+        this.#castSession.stop();
+      }
+      if (this.#playerFrame !== null) {
+        this.#sendPlayerCommand('pauseVideo');
+      }
     }
 
     #renderCastState(isCasting) {
