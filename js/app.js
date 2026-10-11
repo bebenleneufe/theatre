@@ -1520,6 +1520,20 @@
       submitEvent.preventDefault();
       this.#linkScreen(this.#elements.screenTopicInput.value);
     };
+    #deferredInstallPrompt = null;
+    // Chrome propose l'installation par cet événement : on le garde pour
+    // déclencher la fenêtre au moment où l'on touche le bouton.
+    #handleBeforeInstallPrompt = (installEvent) => {
+      installEvent.preventDefault();
+      this.#deferredInstallPrompt = installEvent;
+      this.#elements.installButton.hidden = this.#isRunningAsInstalledApp();
+    };
+    #handleInstallClick = () => this.#promptInstall();
+    #handleAppInstalled = () => {
+      this.#deferredInstallPrompt = null;
+      this.#elements.installButton.hidden = true;
+      this.#toast.show('Rideau est installé : retrouvez-le sur votre écran d’accueil.');
+    };
     #handleScreenTestClick = () => this.#testScreen();
     #handleScreenUnlinkClick = () => this.#unlinkScreen();
 
@@ -1557,6 +1571,9 @@
       document.addEventListener(CURATED_PLAYS_EVENT, this.#handleCuratedPlaysReceived);
       document.addEventListener('DOMContentLoaded', this.#handleDocumentReady);
       document.addEventListener('keydown', this.#handleShortcutKeydown);
+      window.addEventListener('beforeinstallprompt', this.#handleBeforeInstallPrompt);
+      window.addEventListener('appinstalled', this.#handleAppInstalled);
+      this.#elements.installButton.addEventListener('click', this.#handleInstallClick);
 
       this.#renderExternalLinks();
       this.#renderDataControls();
@@ -1587,6 +1604,9 @@
       document.removeEventListener(CURATED_PLAYS_EVENT, this.#handleCuratedPlaysReceived);
       document.removeEventListener('DOMContentLoaded', this.#handleDocumentReady);
       document.removeEventListener('keydown', this.#handleShortcutKeydown);
+      window.removeEventListener('beforeinstallprompt', this.#handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', this.#handleAppInstalled);
+      this.#elements.installButton.removeEventListener('click', this.#handleInstallClick);
       this.#elements.searchInput.removeEventListener('input', this.#handleSearchInput);
       this.#elements.sortSelect.removeEventListener('change', this.#handleSortChange);
       this.#elements.listMode.removeEventListener('change', this.#handleListModeChange);
@@ -1913,6 +1933,30 @@
       this.#startNewSearch();
     }
 
+    // --- Installation sur le téléphone ---
+    #isRunningAsInstalledApp() {
+      return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    }
+
+    async #promptInstall() {
+      const installPrompt = this.#deferredInstallPrompt;
+      if (installPrompt === null) {
+        return;
+      }
+      this.#deferredInstallPrompt = null;
+      this.#elements.installButton.hidden = true;
+      try {
+        await installPrompt.prompt();
+        const { outcome } = await installPrompt.userChoice;
+        if (outcome !== 'accepted') {
+          this.#toast.show('Installation annulée. Le bouton reviendra à la prochaine visite.');
+        }
+      } catch (installError) {
+        console.warn('Installation impossible.', installError);
+        this.#toast.show('Installation impossible ici : passez par le menu du navigateur, « Ajouter à l’écran d’accueil ».');
+      }
+    }
+
     // --- Écran du salon ---
     // Un lien « …#ecran=nom-du-canal » ouvert sur le téléphone relie l'écran en un geste ;
     // le nom est aussitôt retiré de l'adresse pour ne pas traîner dans l'historique.
@@ -2007,6 +2051,7 @@
     importInput: queryRequiredElement('#import-input'),
     unhideButton: queryRequiredElement('#unhide-button'),
     dataStatus: queryRequiredElement('#data-status'),
+    installButton: queryRequiredElement('#install-button'),
     screenForm: queryRequiredElement('#screen-form'),
     screenTopicInput: queryRequiredElement('#screen-topic-input'),
     screenTestButton: queryRequiredElement('#screen-test-button'),

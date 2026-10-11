@@ -1446,3 +1446,30 @@ img {
 .player.is-casting #player-cast {
   display: none;
 }
+
+/* --- Installation sur le téléphone --- */
+.install-button {
+  justify-self: start;
+  margin-top: 12px;
+  padding: 7px 14px;
+  border: 1px solid var(--color-brass);
+  border-radius: 999px;
+  background: var(--color-brass-soft);
+  color: var(--color-brass);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.install-button:hover {
+  background: var(--color-brass);
+  color: var(--color-on-brass);
+}
+
+/* Appli installée sur iPhone : la barre d'état est translucide, le contenu passe dessous. */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
