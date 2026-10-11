@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rideau</title>
+  <meta name="description" content="Catalogue personnel de pièces de théâtre disponibles gratuitement en ligne.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AD%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <h1 class="logo">Rideau<span class="logo-dot">.</span></h1>
+    <p class="tagline">Des pièces de théâtre libres à regarder ou écouter en ligne.</p>
+  </header>
+
+  <main class="layout">
+    <section class="controls" aria-label="Recherche">
+      <label class="search">
+        <span class="visually-hidden">Rechercher une pièce, un auteur…</span>
+        <input id="search-input" type="search" placeholder="Molière, Feydeau, Godot…" autocomplete="off">
+      </label>
+
+      <div id="category-tabs" class="tabs" role="tablist" aria-label="Catégories"></div>
+
+      <div class="secondary-controls">
+        <label class="checkbox">
+          <input id="favorites-only" type="checkbox"> Mes favoris uniquement
+        </label>
+        <label class="select">
+          Trier par
+          <select id="sort-select">
+            <option value="downloads desc">Popularité</option>
+            <option value="date desc">Plus récentes</option>
+            <option value="date asc">Plus anciennes</option>
+            <option value="titleSorter asc">Titre (A→Z)</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <p id="status-message" class="status" role="status" aria-live="polite"></p>
+    <ul id="results-grid" class="grid"></ul>
+    <div class="load-more-wrapper">
+      <button id="load-more" class="button" type="button" hidden>Charger plus</button>
+    </div>
+
+    <section class="external-links" aria-labelledby="external-links-title">
+      <h2 id="external-links-title">Ailleurs, gratuitement</h2>
+      <ul id="external-links-list" class="link-list"></ul>
+    </section>
+  </main>
+
+  <dialog id="player-dialog" class="player">
+    <div class="player-header">
+      <h2 id="player-title" class="player-title"></h2>
+      <button id="player-close" class="icon-button" type="button" aria-label="Fermer">✕</button>
+    </div>
+    <div id="player-frame-wrapper" class="player-frame-wrapper"></div>
+    <div class="player-footer">
+      <a id="player-source-link" target="_blank" rel="noopener noreferrer">Voir sur Internet Archive ↗</a>
+      <button id="player-watched" class="button button-ghost" type="button"></button>
+    </div>
+  </dialog>
+
+  <template id="card-template">
+    <li class="card">
+      <button class="card-open" type="button">
+        <img class="card-thumbnail" alt="" loading="lazy" decoding="async">
+        <span class="card-badge"></span>
+        <span class="card-watched-badge" hidden>Vu</span>
+      </button>
+      <div class="card-body">
+        <h3 class="card-title"></h3>
+        <p class="card-meta"></p>
+      </div>
+      <button class="card-favorite icon-button" type="button" aria-pressed="false" aria-label="Ajouter aux favoris">☆</button>
+    </li>
+  </template>
+</body>
+</html>
