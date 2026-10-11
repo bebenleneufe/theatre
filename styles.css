@@ -464,3 +464,7 @@ a:focus-visible {
     transition: none;
   }
 }
+
+.card-badge-unofficial {
+  background: #8a5a00;
+}

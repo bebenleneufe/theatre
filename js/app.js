@@ -48,8 +48,9 @@
     },
   ];
 
-  // Captations intégrales vérifiées une à une : publiées sur la chaîne YouTube officielle
-  // du théâtre ou de la compagnie (pas de ré-upload), intégrables, tournées après 2000.
+  // Captations intégrales vérifiées une à une : intégrables, en couleur, tournées après 2000.
+  // isUnofficial marque les ré-uploads de chaînes sans lien avec les ayants droit :
+  // ils peuvent être retirés à tout moment, d'où le badge qui les signale.
   // L'année n'est renseignée que lorsqu'elle a pu être confirmée.
   const CURATED_PLAYS = [
     {
@@ -185,6 +186,114 @@
     {
       youtubeId: 'yRr9otK7_Ac', title: 'The Race (théâtre physique)', creator: 'Gecko', year: '', duration: '1:02:27',
       summary: 'Spectacle de théâtre physique de la compagnie britannique Gecko, porté par le mouvement et la musique plutôt que par le texte.',
+    },
+    {
+      youtubeId: 'kHebeOH129c', title: 'Hibernatus', creator: 'Jean-Bernard Luc · avec Jean-Luc Reichmann, Ingrid Chauvin', year: '2015', duration: '1:31:18', isUnofficial: true,
+      summary: 'Un homme congelé dans les glaces du pôle Nord au début du XXe siècle est ramené à la vie de nos jours. Pour lui éviter un choc fatal, sa famille doit lui faire croire qu’on est toujours en 1905.',
+    },
+    {
+      youtubeId: '5MWoRY9ZAG0', title: 'Le Gai Mariage', creator: 'Avec Laurent Ournac, Olivier Sitruk', year: '', duration: '1:52:01', isUnofficial: true,
+      summary: '',
+    },
+    {
+      youtubeId: 'zAvVRGzpEDA', title: 'Les Belles-Sœurs', creator: 'Éric Assous', year: '', duration: '1:36:33', isUnofficial: true,
+      summary: '',
+    },
+    {
+      youtubeId: 'xyBIJwFiAmQ', title: 'Les Bonobos', creator: 'Laurent Baffie', year: '', duration: '1:49:15', isUnofficial: true,
+      summary: '',
+    },
+    {
+      youtubeId: 'Ltea52zfd0Y', title: 'La Vérité', creator: 'Florian Zeller · avec Pierre Arditi', year: '2011', duration: '1:43:54', isUnofficial: true,
+      summary: 'Michel a une liaison avec Alice, la femme de son meilleur ami Paul. Menteur maladroit, il s’emmêle dans ses mensonges… et découvre qu’il n’est peut-être pas le seul à mentir.',
+    },
+    {
+      youtubeId: 'o9V2Jg-poRs', title: 'Comme s’il en pleuvait', creator: 'Sébastien Thiéry · avec Pierre Arditi, Évelyne Bouix', year: '2014', duration: '1:25:40', isUnofficial: true,
+      summary: 'Un couple découvre chaque jour des billets de banque qui apparaissent mystérieusement dans son appartement. D’où vient cet argent, et qui le dépose ?',
+    },
+    {
+      youtubeId: 'smhwtfWD-EE', title: '13 à table', creator: 'Marc-Gilbert Sauvageon', year: '2020', duration: '1:52:31', isUnofficial: true,
+      summary: 'Le soir du réveillon de Noël, Madeleine, très superstitieuse, s’aperçoit qu’ils vont être treize à table. Il faut à tout prix trouver un quatorzième convive.',
+    },
+    {
+      youtubeId: 'Uf_eZW3Z0Pw', title: 'Ils se sont aimés', creator: 'Pierre Palmade, Muriel Robin · avec Pierre Palmade, Michèle Laroque', year: '2002', duration: '1:28:01', isUnofficial: true,
+      summary: 'Une suite de scènes de la vie d’un couple, de la rencontre aux disputes et à la séparation, jouée par Pierre Palmade et Michèle Laroque.',
+    },
+    {
+      youtubeId: 'g1eJKQSMIbM', title: 'L’Invitation', creator: 'Théâtre de la Madeleine · avec Gad Elmaleh', year: '2020', duration: '1:34:45', isUnofficial: true,
+      summary: '',
+    },
+    {
+      youtubeId: 'aohtKoYbevo', title: 'Espèces menacées', creator: 'Ray Cooney · avec Gérard Jugnot, Martin Lamotte', year: '', duration: '1:40:54', isUnofficial: true,
+      summary: 'Un comptable sans histoire récupère par erreur une mallette remplie de billets et décide de partir à l’étranger le soir même de son anniversaire. Farce de Ray Cooney.',
+    },
+    {
+      youtubeId: 'XiEyd4L1VmA', title: 'C’était quand la dernière fois ?', creator: 'Théâtre Tristan Bernard · avec Virginie Hocq, Zinedine Soualem', year: '2018', duration: '1:35:52', isUnofficial: true,
+      summary: '',
+    },
+    {
+      youtubeId: 'axpmHfdoU5I', title: 'Je préfère qu’on reste amis', creator: 'Laurent Ruquier · avec Michèle Bernier, Frédéric Diefenthal', year: '2016', duration: '1:59:04', isUnofficial: true,
+      summary: 'Claudine est amoureuse depuis longtemps de son meilleur ami Valentin, qui ne la voit que comme une amie. Comédie de Laurent Ruquier.',
+    },
+    {
+      youtubeId: 'DbTbFmXRH9s', title: 'Madame Doubtfire', creator: 'Avec Michel Leeb', year: '', duration: '1:47:43', isUnofficial: true,
+      summary: 'Un père divorcé, privé de ses enfants, se déguise en vieille gouvernante pour pouvoir les voir chaque jour.',
+    },
+    {
+      youtubeId: 'WlAGpyw4eEc', title: 'L’Hôtel du libre échange', creator: 'Feydeau · diffusé sur France 2', year: '2015', duration: '2:27:33', isUnofficial: true,
+      summary: 'Pinglet donne rendez-vous à Marcelle, la femme de son ami Paillardin, dans un hôtel douteux. Le même soir, tout leur entourage s’y retrouve. Vaudeville de Feydeau.',
+    },
+    {
+      youtubeId: 'TNvDKIANsLo', title: 'Le Malade imaginaire', creator: 'Molière · Comédie-Française, mise en scène Claude Stratz', year: '2001', duration: '2:01:17', isUnofficial: true,
+      summary: 'Argan, hypocondriaque, veut marier sa fille Angélique à un médecin pour être soigné à domicile. Mais Angélique aime Cléante, et la servante Toinette va tout faire pour les aider.',
+    },
+    {
+      youtubeId: '1yN2o8nJMOo', title: 'Dom Juan ou le Festin de pierre', creator: 'Molière · Comédie-Française', year: '2002', duration: '2:18:50', isUnofficial: true,
+      summary: 'Dom Juan, séducteur libertin, enchaîne les conquêtes et défie toutes les règles, humaines comme divines, jusqu’à inviter à dîner la statue d’un homme qu’il a tué.',
+    },
+    {
+      youtubeId: 'mlMnz9B-Zho', title: 'Le Misanthrope', creator: 'Molière · Comédie-Française, mise en scène Jean-Pierre Miquel', year: '2000', duration: '2:15:10', isUnofficial: true,
+      summary: 'Alceste déteste l’hypocrisie mondaine et veut dire la vérité à tout le monde. Il est pourtant amoureux de Célimène, jeune veuve coquette qui adore la vie de salon.',
+    },
+    {
+      youtubeId: 'smoT72cbpRo', title: 'Le Mariage de Figaro', creator: 'Beaumarchais', year: '', duration: '2:11:39', isUnofficial: true,
+      summary: 'Le jour de son mariage avec Suzanne, Figaro découvre que son maître, le comte Almaviva, veut séduire sa fiancée. Une folle journée de ruses et de quiproquos.',
+    },
+    {
+      youtubeId: '2qsVJN0C0GE', title: 'L’Avare', creator: 'Molière', year: '', duration: '1:59:40', isUnofficial: true,
+      summary: 'Harpagon, vieillard obsédé par son argent, veut marier ses enfants pour son profit et épouser lui-même la jeune Mariane, aimée de son fils Cléante.',
+    },
+    {
+      youtubeId: 'Kb_voCqu250', title: 'Hamlet', creator: 'Shakespeare', year: '', duration: '2:09:08', isUnofficial: true,
+      summary: 'Le spectre de son père apprend au prince Hamlet qu’il a été assassiné par son frère Claudius, devenu roi et mari de sa mère. Hamlet feint la folie pour préparer sa vengeance.',
+    },
+    {
+      youtubeId: 'jzFrnFP--RA', title: 'Macbeth (EN)', creator: 'Shakespeare · Stratford Festival', year: '2017', duration: '2:17:00', isUnofficial: true,
+      summary: 'Poussé par la prophétie de trois sorcières et par l’ambition de sa femme, le général Macbeth assassine le roi Duncan pour prendre sa place. En anglais.',
+    },
+    {
+      youtubeId: 'QKoIJP8QgiM', title: 'Hamlet (EN)', creator: 'Shakespeare · Stratford Festival', year: '2016', duration: '2:45:32', isUnofficial: true,
+      summary: 'Le spectre de son père apprend au prince Hamlet qu’il a été assassiné par son frère Claudius, devenu roi. Hamlet feint la folie pour préparer sa vengeance. En anglais.',
+    },
+    {
+      youtubeId: 'TcKPpOr7_gU', title: 'Othello (EN)', creator: 'Shakespeare · Stratford Festival', year: '2019', duration: '2:40:24', isUnofficial: true,
+      summary: 'Le général Othello, manipulé par son enseigne Iago, finit par croire que sa femme Desdémone le trompe. En anglais.',
+    },
+    {
+      youtubeId: 'l8JO39fuFfc', title: 'The Tempest (EN)', creator: 'Shakespeare · Stratford Festival', year: '2019', duration: '2:23:41', isUnofficial: true,
+      summary: 'Prospero, duc de Milan détrôné et exilé sur une île avec sa fille Miranda, déclenche une tempête pour faire échouer ses ennemis sur son rivage. En anglais.',
+    },
+    {
+      youtubeId: 'ztAhKXhnxvM', title: 'Much Ado About Nothing (EN)', creator: 'Shakespeare · Stratford Festival', year: '2023', duration: '2:37:24', isUnofficial: true,
+      summary: 'Béatrice et Bénédict passent leur temps à se disputer, pendant que Claudio et Héro s’apprêtent à se marier. Leurs amis vont s’amuser à les rapprocher. En anglais.',
+    },
+    {
+      youtubeId: 'UKcc96ua8XY', title: 'Le Marchand de Venise (en hébreu)', creator: 'Shakespeare · Habima, mise en scène Ilan Ronen, Shakespeare’s Globe', year: '2012', duration: '2:15:14', isUnofficial: true,
+      summary: 'Pour aider son ami Bassanio, le marchand Antonio emprunte de l’argent à l’usurier Shylock, qui exige une livre de sa chair en garantie. Version du théâtre national israélien Habima, jouée au Globe de Londres.',
+    },
+    {
+      youtubeId: '3ZrL6HciBUc', title: 'The Importance of Being Earnest (EN)', creator: 'Oscar Wilde · Roundabout Theatre, Broadway', year: '2011', duration: '2:10:26', isUnofficial: true,
+      summary: 'Deux jeunes dandys s’inventent chacun un double nommé Ernest pour échapper à leurs obligations, jusqu’à ce que leurs mensonges se croisent. En anglais.',
     },
   ].map(({ duration, ...curatedPlay }) => ({
     ...curatedPlay,
@@ -484,6 +593,10 @@
     return `${play.title} ${play.creator}`.toLocaleLowerCase('fr').includes(normalizedSearch);
   }
 
+  function countUnofficial(plays) {
+    return plays.filter((play) => play.isUnofficial === true).length;
+  }
+
   function filterAndSortLocally(plays, { searchText, sort }) {
     const matchingPlays = plays.filter((play) => matchesSearchText(play, searchText));
     const sorter = LOCAL_SORTERS[sort];
@@ -625,7 +738,9 @@
       cardElement.dataset.identifier = play.identifier;
 
       cardElement.querySelector('.card-thumbnail').src = thumbnailUrl(play);
-      cardElement.querySelector('.card-badge').textContent = play.badge;
+      const badgeElement = cardElement.querySelector('.card-badge');
+      badgeElement.textContent = play.isUnofficial === true ? 'Non officielle' : play.badge;
+      badgeElement.classList.toggle('card-badge-unofficial', play.isUnofficial === true);
       cardElement.querySelector('.card-title').textContent = play.title;
       cardElement.querySelector('.card-meta').textContent = [play.creator, play.year]
         .filter((metaPart) => metaPart !== '')
@@ -763,7 +878,8 @@
     }
 
     #renderMeta(play, durationSeconds) {
-      this.#metaElement.textContent = [play.creator, play.year, durationSeconds > 0 ? formatDuration(durationSeconds) : '']
+      const unofficialNotice = play.isUnofficial === true ? 'mise en ligne non officielle, peut disparaître' : '';
+      this.#metaElement.textContent = [play.creator, play.year, durationSeconds > 0 ? formatDuration(durationSeconds) : '', unofficialNotice]
         .filter((metaPart) => metaPart !== '')
         .join(' · ');
     }
@@ -983,7 +1099,7 @@
       this.#elements.loadMoreButton.hidden = true;
       this.#setStatus(matchingPlays.length === 0
         ? 'Aucune pièce de la sélection ne correspond. Essayez les autres onglets.'
-        : `${matchingPlays.length} captation(s) intégrale(s), publiées par les théâtres et compagnies eux-mêmes.`);
+        : `${matchingPlays.length} captation(s) intégrale(s), dont ${countUnofficial(matchingPlays)} mise(s) en ligne non officielle(s).`);
     }
 
     #showFavorites() {
