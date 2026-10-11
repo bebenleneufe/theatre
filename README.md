@@ -23,7 +23,10 @@ captations filmées, théâtre radiophonique et lectures LibriVox (domaine publi
 - 🎲 « Surprends-moi » : ouvre une pièce non vue au hasard parmi celles affichées
 - **Mes données** : export / import d'un fichier de sauvegarde (fusion, rien n'est effacé)
 - Liens vers d'autres plateformes gratuites (France.tv, France Culture, ARTE…)
-- Thème clair / sombre automatique, utilisable sur mobile
+- Rangée « Reprendre » en haut pour les pièces commencées
+- Réglages retenus d'une visite à l'autre (onglet, filtres, tri, liste)
+- Confirmations avec « Annuler » quand on masque un résultat, raccourci `/` pour chercher
+- Thème sombre « salle obscure », pensé pour le mobile (fiche plein écran sur téléphone)
 
 ## Lancer l'application
 
