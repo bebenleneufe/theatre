@@ -58,6 +58,10 @@
       <button id="player-close" class="icon-button" type="button" aria-label="Fermer">✕</button>
     </div>
     <div id="player-frame-wrapper" class="player-frame-wrapper"></div>
+    <div class="player-details">
+      <p id="player-meta" class="player-meta"></p>
+      <p id="player-summary" class="player-summary"></p>
+    </div>
     <div class="player-footer">
       <a id="player-source-link" target="_blank" rel="noopener noreferrer">Voir la source ↗</a>
       <button id="player-watched" class="button button-ghost" type="button"></button>
@@ -70,6 +74,7 @@
         <img class="card-thumbnail" alt="" loading="lazy" decoding="async">
         <span class="card-badge"></span>
         <span class="card-watched-badge" hidden>Vu</span>
+        <span class="card-duration" hidden></span>
       </button>
       <div class="card-body">
         <h3 class="card-title"></h3>

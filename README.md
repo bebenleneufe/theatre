@@ -14,7 +14,8 @@ captations filmées, théâtre radiophonique et lectures LibriVox (domaine publi
 - Catégories Internet Archive (depuis 2000) : théâtre filmé FR / EN, théâtre radiophonique,
   lectures LibriVox FR / EN
 - Tri par popularité, date ou titre, pagination « Charger plus »
-- Lecteur intégré (vidéo ou audio) dans une fenêtre
+- Durée affichée sur chaque vignette
+- Fiche avec résumé avant de lancer la pièce, puis lecteur intégré (vidéo ou audio)
 - Favoris ☆ et pièces « vues », enregistrés dans le navigateur (`localStorage`)
 - Liens vers d'autres plateformes gratuites (France.tv, France Culture, ARTE…)
 - Thème clair / sombre automatique, utilisable sur mobile

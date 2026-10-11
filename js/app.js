@@ -52,29 +52,88 @@
   // du théâtre ou de la compagnie (pas de ré-upload), intégrables, tournées après 2000.
   // L'année n'est renseignée que lorsqu'elle a pu être confirmée.
   const CURATED_PLAYS = [
-    { youtubeId: 'lgiuUY3zWfY', title: 'Îles flottantes', creator: 'Kenza Berrada, d’après Brigitte Giraud · Odéon', year: '2026' },
-    { youtubeId: 'kJhd3q7wZE4', title: 'Le Chant d’ivresse', creator: 'Odéon – Théâtre de l’Europe', year: '' },
-    { youtubeId: '_BUbSJ-teQ0', title: 'Combat de nègre et de chiens', creator: 'Koltès · Cie Kobal’t, Théâtre de la Bastille', year: '2022' },
-    { youtubeId: '2Bxz_-9VDlc', title: 'Un sentiment de vie', creator: 'Claudine Galea · Cie Rabeux, Théâtre de la Bastille', year: '' },
-    { youtubeId: 'eG_DjSg5HQ0', title: 'Les Derniers Jours', creator: 'Mise en scène Jean-Michel Rabeux · Cie Rabeux', year: '' },
-    { youtubeId: 'R5lwmbQ3eQk', title: 'Comme il vous plaira', creator: 'Shakespeare · Théâtre du Nord', year: '2018' },
-    { youtubeId: 'ISzpB9gk2gg', title: 'Le Tartuffe ou l’Imposteur (lecture à la table)', creator: 'Molière · Comédie-Française', year: '' },
-    { youtubeId: '9pZecJzEu8U', title: 'Les Fausses Confidences (lecture à la table)', creator: 'Marivaux · Comédie-Française', year: '' },
-    { youtubeId: 'Bv-YuTjXjhc', title: 'Le Menteur', creator: 'Corneille · Théâtre du Lyon', year: '' },
-    { youtubeId: 'na-kfkhTYQI', title: 'Cyrano de Bergerac', creator: 'Rostand · Cie du Berger', year: '2012' },
-    { youtubeId: 'gekAlcby5xQ', title: 'Knock', creator: 'Jules Romains · Cie du Berger', year: '' },
-    { youtubeId: 'mBqQv0tV6ks', title: 'Henry VI', creator: 'Shakespeare · Machine Théâtre, Odéon', year: '2009' },
-    { youtubeId: 'V6dqwQUCrV8', title: 'Lorenzaccio', creator: 'Musset · Cie Philippe Wiart', year: '2009' },
-    { youtubeId: '6yC3Uh9Q5j8', title: 'L’Île des esclaves', creator: 'Marivaux · Théâtre de la vallée', year: '' },
-    { youtubeId: '6Z2wTrQXoW4', title: 'Le Misanthrope à tout prix', creator: 'Cie du Plateau Libre', year: '' },
-    { youtubeId: '6GZksuQggng', title: 'Le Mont Analogue', creator: 'D’après René Daumal · Temps Blancs', year: '' },
-    { youtubeId: 'IMs6bi0J-fA', title: 'L’Espèce humaine ou l’Inimaginable', creator: 'D’après Robert Antelme · Théâtre Amer', year: '' },
-    { youtubeId: 'TsboxpFnPrE', title: 'My Story', creator: 'Céline Ohrel · Cie Diplex', year: '' },
-    { youtubeId: 'wBWsaO7wgnQ', title: 'The Tempest (EN)', creator: 'Shakespeare · The Lord Chamberlain’s Men', year: '2018' },
-    { youtubeId: 'aAzvnV4Qz9w', title: 'Missing (théâtre physique)', creator: 'Gecko', year: '2012' },
-    { youtubeId: 'YSvS9y1WjrE', title: 'The Overcoat (théâtre physique)', creator: 'Gecko', year: '' },
-    { youtubeId: 'yRr9otK7_Ac', title: 'The Race (théâtre physique)', creator: 'Gecko', year: '' },
-  ].map((curatedPlay) => ({ ...curatedPlay, identifier: `youtube:${curatedPlay.youtubeId}`, badge: 'Vidéo' }));
+    {
+      youtubeId: 'lgiuUY3zWfY', title: 'Îles flottantes', creator: 'Kenza Berrada, d’après Brigitte Giraud · Odéon', year: '2026', duration: '1:10:52',
+      summary: 'Un lycéen, au fil d’un exposé, finit par cesser de mentir et dire qui il est. Librement adapté du roman Jour de courage de Brigitte Giraud et créé avec une vingtaine d’adolescents dans le cadre du programme « Adolescence et territoire(s) » de l’Odéon.',
+    },
+    { youtubeId: 'kJhd3q7wZE4', title: 'Le Chant d’ivresse', creator: 'Odéon – Théâtre de l’Europe', year: '', duration: '1:32:55', summary: '' },
+    {
+      youtubeId: '_BUbSJ-teQ0', title: 'Combat de nègre et de chiens', creator: 'Koltès · Cie Kobal’t, Théâtre de la Bastille', year: '2022', duration: '1:59:15',
+      summary: 'Sur un chantier en Afrique de l’Ouest, à la tombée de la nuit, Alboury vient réclamer le corps de son frère, mort sur le chantier. Face à lui : Horn, le chef de chantier, Cal, l’ingénieur, et Léone, que Horn vient de faire venir de Paris. Mise en scène de Mathieu Boisliveau.',
+    },
+    {
+      youtubeId: '2Bxz_-9VDlc', title: 'Un sentiment de vie', creator: 'Claudine Galea · Cie Rabeux, Théâtre de la Bastille', year: '', duration: '1:15:23',
+      summary: 'Une autrice monte sur scène et trouve enfin les mots pour dire à son père, des années après sa mort, la force de son amour. Un récit traversé par les traces de la guerre d’Algérie, où la musique finit par relier le père et la fille. Mise en scène de Jean-Michel Rabeux.',
+    },
+    { youtubeId: 'eG_DjSg5HQ0', title: 'Les Derniers Jours', creator: 'Mise en scène Jean-Michel Rabeux · Cie Rabeux', year: '', duration: '1:24:02', summary: '' },
+    {
+      youtubeId: 'R5lwmbQ3eQk', title: 'Comme il vous plaira', creator: 'Shakespeare · Théâtre du Nord', year: '2018', duration: '2:37:38',
+      summary: 'Chassée de la cour par son oncle usurpateur, Rosalinde se réfugie dans la forêt d’Arden, déguisée en jeune homme, avec sa cousine Célia. Elle y retrouve Orlando, amoureux d’elle, qui ne la reconnaît pas. Une comédie de Shakespeare sur l’amour et le travestissement.',
+    },
+    {
+      youtubeId: 'ISzpB9gk2gg', title: 'Le Tartuffe ou l’Imposteur (lecture à la table)', creator: 'Molière · Comédie-Française', year: '', duration: '1:55:31',
+      summary: 'Orgon, sous l’emprise du faux dévot Tartuffe, est prêt à lui donner sa fille et ses biens. Sa femme Elmire va tendre un piège pour démasquer l’imposteur. Lecture filmée par la troupe de la Comédie-Française dans sa série « Théâtre à la table ».',
+    },
+    {
+      youtubeId: '9pZecJzEu8U', title: 'Les Fausses Confidences (lecture à la table)', creator: 'Marivaux · Comédie-Française', year: '', duration: '1:48:12',
+      summary: 'Dorante, jeune homme ruiné, entre comme intendant chez la riche veuve Araminte, dont il est amoureux. Son ancien valet Dubois orchestre une série de mensonges pour qu’elle tombe amoureuse de lui. Lecture filmée par la troupe de la Comédie-Française.',
+    },
+    {
+      youtubeId: 'Bv-YuTjXjhc', title: 'Le Menteur', creator: 'Corneille · Théâtre du Lyon', year: '', duration: '1:45:35',
+      summary: 'Fraîchement arrivé à Paris, le jeune Dorante s’invente exploits et aventures pour séduire, et se trompe sur le nom de la femme qu’il aime. Ses mensonges s’enchaînent jusqu’à l’emmêler complètement. Comédie de Corneille.',
+    },
+    {
+      youtubeId: 'na-kfkhTYQI', title: 'Cyrano de Bergerac', creator: 'Rostand · Cie du Berger', year: '2012', duration: '3:12:03',
+      summary: 'Cyrano, poète et bretteur au nez immense, aime en secret sa cousine Roxane. Elle s’éprend du beau Christian, et Cyrano l’aide à la séduire en lui prêtant ses mots.',
+    },
+    {
+      youtubeId: 'gekAlcby5xQ', title: 'Knock', creator: 'Jules Romains · Cie du Berger', year: '', duration: '2:17:20',
+      summary: 'Le docteur Knock reprend le cabinet d’un village de montagne où personne n’est jamais malade. Il entreprend de convaincre chaque habitant qu’il est un malade qui s’ignore.',
+    },
+    {
+      youtubeId: 'mBqQv0tV6ks', title: 'Henry VI', creator: 'Shakespeare · Machine Théâtre, Odéon', year: '2009', duration: '1:29:40',
+      summary: 'Après la mort d’Henry V, le jeune roi Henry VI voit l’Angleterre se déchirer entre les maisons d’York et de Lancastre : c’est le début de la guerre des Deux-Roses.',
+    },
+    {
+      youtubeId: 'V6dqwQUCrV8', title: 'Lorenzaccio', creator: 'Musset · Cie Philippe Wiart', year: '2009', duration: '1:55:42',
+      summary: 'Florence, 1537. Lorenzo de Médicis, compagnon de débauche du duc Alexandre, passe pour un lâche. Il prépare en secret l’assassinat du tyran.',
+    },
+    {
+      youtubeId: '6yC3Uh9Q5j8', title: 'L’Île des esclaves', creator: 'Marivaux · Théâtre de la vallée', year: '', duration: '1:14:05',
+      summary: 'Après un naufrage, deux maîtres et leurs valets échouent sur une île gouvernée par d’anciens esclaves. La loi de l’île les oblige à échanger leurs rôles.',
+    },
+    { youtubeId: '6Z2wTrQXoW4', title: 'Le Misanthrope à tout prix', creator: 'Cie du Plateau Libre', year: '', duration: '1:15:11', summary: '' },
+    {
+      youtubeId: '6GZksuQggng', title: 'Le Mont Analogue', creator: 'D’après René Daumal · Temps Blancs', year: '', duration: '1:27:14',
+      summary: 'D’après le roman inachevé de René Daumal : une petite expédition part à la recherche d’une montagne invisible qui relierait la Terre au Ciel.',
+    },
+    {
+      youtubeId: 'IMs6bi0J-fA', title: 'L’Espèce humaine ou l’Inimaginable', creator: 'D’après Robert Antelme · Théâtre Amer', year: '', duration: '1:17:44',
+      summary: 'D’après le récit de Robert Antelme, résistant déporté en 1944, sur sa détention dans un camp de travail nazi et sur ce qui reste d’humain quand tout est fait pour le nier.',
+    },
+    { youtubeId: 'TsboxpFnPrE', title: 'My Story', creator: 'Céline Ohrel · Cie Diplex', year: '', duration: '1:34:44', summary: '' },
+    {
+      youtubeId: 'wBWsaO7wgnQ', title: 'The Tempest (EN)', creator: 'Shakespeare · The Lord Chamberlain’s Men', year: '2018', duration: '1:56:28',
+      summary: 'Prospero, duc de Milan détrôné et exilé sur une île avec sa fille Miranda, déclenche une tempête pour faire échouer ses ennemis sur son rivage. En anglais.',
+    },
+    {
+      youtubeId: 'aAzvnV4Qz9w', title: 'Missing (théâtre physique)', creator: 'Gecko', year: '2012', duration: '1:05:03',
+      summary: 'Spectacle de théâtre physique de la compagnie britannique Gecko : peu de dialogues, une histoire portée par le mouvement, la lumière et la musique.',
+    },
+    {
+      youtubeId: 'YSvS9y1WjrE', title: 'The Overcoat (théâtre physique)', creator: 'Gecko', year: '', duration: '1:19:38',
+      summary: 'D’après la nouvelle de Gogol : un modeste employé de bureau voit sa vie bouleversée par un nouveau manteau. Théâtre physique, quasiment sans paroles.',
+    },
+    {
+      youtubeId: 'yRr9otK7_Ac', title: 'The Race (théâtre physique)', creator: 'Gecko', year: '', duration: '1:02:27',
+      summary: 'Spectacle de théâtre physique de la compagnie britannique Gecko, porté par le mouvement et la musique plutôt que par le texte.',
+    },
+  ].map(({ duration, ...curatedPlay }) => ({
+    ...curatedPlay,
+    identifier: `youtube:${curatedPlay.youtubeId}`,
+    badge: 'Vidéo',
+    durationSeconds: parseDurationToSeconds(duration),
+  }));
 
   const EXTERNAL_LINKS = [
     {
@@ -130,6 +189,40 @@
 
   function firstValue(fieldValue) {
     return Array.isArray(fieldValue) ? fieldValue[0] : fieldValue;
+  }
+
+  function parseDurationToSeconds(rawDuration) {
+    const durationText = String(rawDuration ?? '').trim();
+    if (durationText === '') {
+      return 0;
+    }
+    const seconds = durationText
+      .split(':')
+      .reduce((totalSeconds, durationPart) => totalSeconds * 60 + Number(durationPart), 0);
+    return Number.isFinite(seconds) ? seconds : 0;
+  }
+
+  function formatDuration(totalSeconds) {
+    const totalMinutes = Math.round(totalSeconds / 60);
+    if (totalMinutes < 60) {
+      return `${totalMinutes} min`;
+    }
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = String(totalMinutes % 60).padStart(2, '0');
+    return `${hours} h ${minutes}`;
+  }
+
+  const MAXIMUM_SUMMARY_LENGTH = 1200;
+
+  // DOMParser produit un document inerte : les scripts et gestionnaires d'événements
+  // présents dans les descriptions (HTML libre saisi par les contributeurs) ne s'exécutent pas.
+  function htmlToPlainText(rawHtml) {
+    const htmlWithLineBreaks = String(rawHtml ?? '').replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n');
+    const parsedDocument = new DOMParser().parseFromString(htmlWithLineBreaks, 'text/html');
+    const plainText = (parsedDocument.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
+    return plainText.length > MAXIMUM_SUMMARY_LENGTH
+      ? `${plainText.slice(0, MAXIMUM_SUMMARY_LENGTH).trimEnd()}…`
+      : plainText;
   }
   // --- archiveApi ---
 
@@ -189,6 +282,109 @@
       totalCount: payload.response.numFound,
       plays: payload.response.docs.map((document) => toPlay(document, category.badge)),
     };
+  }
+
+  // Plusieurs fichiers « original » = une captation découpée en parties : on additionne.
+  // Sans original mesuré, on se rabat sur le plus long fichier dérivé.
+  function computeTotalDuration(files) {
+    const measuredFiles = files.filter((file) => file.length !== undefined);
+    const originalSeconds = measuredFiles
+      .filter((file) => file.source === 'original')
+      .reduce((totalSeconds, file) => totalSeconds + parseDurationToSeconds(file.length), 0);
+    if (originalSeconds > 0) {
+      return originalSeconds;
+    }
+    return measuredFiles.reduce((longest, file) => Math.max(longest, parseDurationToSeconds(file.length)), 0);
+  }
+
+  async function fetchArchiveDetails(identifier, signal) {
+    const response = await fetch(`${ARCHIVE_ORIGIN}/metadata/${encodeURIComponent(identifier)}`, { signal });
+    if (!response.ok) {
+      throw new Error(`Internet Archive a répondu ${response.status}`);
+    }
+    const payload = await response.json();
+    return {
+      durationSeconds: computeTotalDuration(payload.files ?? []),
+      summary: htmlToPlainText(firstValue(payload.metadata?.description)),
+    };
+  }
+
+  // --- playDetailsLoader ---
+  const MAXIMUM_PARALLEL_DETAIL_REQUESTS = 4;
+
+  // Une requête par pièce : on en limite le nombre simultané pour ne pas saturer
+  // le réseau ni Internet Archive, et on met en cache pour ne jamais redemander.
+  class PlayDetailsLoader {
+    #detailsByIdentifier = new Map();
+    #pendingJobs = [];
+    #activeRequestCount = 0;
+    #abortController = new AbortController();
+
+    load(play, { isUrgent = false } = {}) {
+      if (isYoutubePlay(play)) {
+        return Promise.resolve({ durationSeconds: play.durationSeconds, summary: play.summary });
+      }
+
+      const cachedDetails = this.#detailsByIdentifier.get(play.identifier);
+      if (cachedDetails !== undefined) {
+        if (isUrgent) {
+          this.#moveJobToFront(play.identifier);
+        }
+        return cachedDetails;
+      }
+
+      const detailsPromise = new Promise((resolve, reject) => {
+        const job = { identifier: play.identifier, resolve, reject };
+        if (isUrgent) {
+          this.#pendingJobs.unshift(job);
+        } else {
+          this.#pendingJobs.push(job);
+        }
+      });
+      this.#detailsByIdentifier.set(play.identifier, detailsPromise);
+      this.#startPendingJobs();
+      return detailsPromise;
+    }
+
+    cancelPending() {
+      const cancelledJobs = this.#pendingJobs.splice(0);
+      cancelledJobs.forEach((job) => {
+        this.#detailsByIdentifier.delete(job.identifier);
+        job.reject(new DOMException('Chargement annulé', 'AbortError'));
+      });
+    }
+
+    destroy() {
+      this.cancelPending();
+      this.#abortController.abort();
+      this.#detailsByIdentifier.clear();
+    }
+
+    #moveJobToFront(identifier) {
+      const jobIndex = this.#pendingJobs.findIndex((job) => job.identifier === identifier);
+      if (jobIndex > 0) {
+        this.#pendingJobs.unshift(...this.#pendingJobs.splice(jobIndex, 1));
+      }
+    }
+
+    #startPendingJobs() {
+      while (this.#activeRequestCount < MAXIMUM_PARALLEL_DETAIL_REQUESTS && this.#pendingJobs.length > 0) {
+        this.#runJob(this.#pendingJobs.shift());
+      }
+    }
+
+    async #runJob(job) {
+      this.#activeRequestCount += 1;
+      try {
+        job.resolve(await fetchArchiveDetails(job.identifier, this.#abortController.signal));
+      } catch (detailsError) {
+        this.#detailsByIdentifier.delete(job.identifier);
+        job.reject(detailsError);
+      } finally {
+        this.#activeRequestCount -= 1;
+        this.#startPendingJobs();
+      }
+    }
   }
 
   // --- playSources ---
@@ -302,15 +498,17 @@
     #gridElement;
     #cardTemplate;
     #library;
+    #detailsLoader;
     #onOpenPlay;
     #playsByIdentifier = new Map();
     #cardsByIdentifier = new Map();
     #handleGridClick = (clickEvent) => this.#onGridClick(clickEvent);
 
-    constructor({ gridElement, cardTemplate, library, onOpenPlay }) {
+    constructor({ gridElement, cardTemplate, library, detailsLoader, onOpenPlay }) {
       this.#gridElement = gridElement;
       this.#cardTemplate = cardTemplate;
       this.#library = library;
+      this.#detailsLoader = detailsLoader;
       this.#onOpenPlay = onOpenPlay;
       this.#gridElement.addEventListener('click', this.#handleGridClick);
     }
@@ -340,13 +538,28 @@
 
     #buildCards(plays) {
       const fragment = document.createDocumentFragment();
-      plays
-        .filter((play) => !this.#playsByIdentifier.has(play.identifier))
-        .forEach((play) => {
-          this.#playsByIdentifier.set(play.identifier, play);
-          fragment.append(this.#buildCard(play));
-        });
+      const newPlays = plays.filter((play) => !this.#playsByIdentifier.has(play.identifier));
+      newPlays.forEach((play) => {
+        this.#playsByIdentifier.set(play.identifier, play);
+        fragment.append(this.#buildCard(play));
+      });
+      newPlays.forEach((play) => this.#showDurationWhenLoaded(play));
       return fragment;
+    }
+
+    async #showDurationWhenLoaded(play) {
+      try {
+        const { durationSeconds } = await this.#detailsLoader.load(play);
+        const durationBadge = this.#cardsByIdentifier.get(play.identifier)?.querySelector('.card-duration');
+        if (durationBadge !== undefined && durationBadge !== null && durationSeconds > 0) {
+          durationBadge.textContent = formatDuration(durationSeconds);
+          durationBadge.hidden = false;
+        }
+      } catch (detailsError) {
+        if (!isAbortError(detailsError)) {
+          console.warn(`Durée indisponible pour ${play.identifier}`, detailsError);
+        }
+      }
     }
 
     #buildCard(play) {
@@ -359,7 +572,7 @@
       cardElement.querySelector('.card-meta').textContent = [play.creator, play.year]
         .filter((metaPart) => metaPart !== '')
         .join(' · ');
-      cardElement.querySelector('.card-open').setAttribute('aria-label', `Lancer « ${play.title} »`);
+      cardElement.querySelector('.card-open').setAttribute('aria-label', `Voir le résumé de « ${play.title} »`);
 
       this.#applyPersonalState(cardElement, play.identifier);
       this.#cardsByIdentifier.set(play.identifier, cardElement);
@@ -403,16 +616,24 @@
   class PlayerDialog {
     #dialogElement;
     #titleElement;
+    #metaElement;
+    #summaryElement;
     #frameWrapper;
     #sourceLink;
     #watchedButton;
     #closeButton;
     #library;
+    #detailsLoader;
     #onPersonalStateChange;
     #currentPlay = null;
 
     #handleCloseClick = () => this.#dialogElement.close();
     #handleWatchedClick = () => this.#toggleWatched();
+    #handleLaunchClick = (clickEvent) => {
+      if (clickEvent.target.closest('.player-launch') !== null) {
+        this.#launchPlayer();
+      }
+    };
     #handleDialogClose = () => this.#unloadPlayer();
     #handleBackdropClick = (clickEvent) => {
       if (clickEvent.target === this.#dialogElement) {
@@ -420,18 +641,22 @@
       }
     };
 
-    constructor({ dialogElement, library, onPersonalStateChange }) {
+    constructor({ dialogElement, library, detailsLoader, onPersonalStateChange }) {
       this.#dialogElement = dialogElement;
       this.#titleElement = dialogElement.querySelector('#player-title');
+      this.#metaElement = dialogElement.querySelector('#player-meta');
+      this.#summaryElement = dialogElement.querySelector('#player-summary');
       this.#frameWrapper = dialogElement.querySelector('#player-frame-wrapper');
       this.#sourceLink = dialogElement.querySelector('#player-source-link');
       this.#watchedButton = dialogElement.querySelector('#player-watched');
       this.#closeButton = dialogElement.querySelector('#player-close');
       this.#library = library;
+      this.#detailsLoader = detailsLoader;
       this.#onPersonalStateChange = onPersonalStateChange;
 
       this.#closeButton.addEventListener('click', this.#handleCloseClick);
       this.#watchedButton.addEventListener('click', this.#handleWatchedClick);
+      this.#frameWrapper.addEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.addEventListener('close', this.#handleDialogClose);
       this.#dialogElement.addEventListener('click', this.#handleBackdropClick);
     }
@@ -442,26 +667,79 @@
       this.#sourceLink.href = detailsUrl(play);
       this.#sourceLink.textContent = `Voir sur ${sourceName(play)} ↗`;
       this.#renderWatchedButton();
-
-      const playerFrame = document.createElement('iframe');
-      playerFrame.src = embedUrl(play);
-      playerFrame.title = `Lecteur : ${play.title}`;
-      playerFrame.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture';
-      // YouTube refuse de lire une vidéo intégrée sans en-tête Referer (erreur 153).
-      playerFrame.referrerPolicy = 'strict-origin-when-cross-origin';
-      playerFrame.allowFullscreen = true;
-      playerFrame.className = 'player-frame';
-      this.#frameWrapper.replaceChildren(playerFrame);
+      this.#renderMeta(play, 0);
+      this.#summaryElement.textContent = 'Chargement du résumé…';
+      this.#frameWrapper.replaceChildren(this.#buildPoster(play));
 
       this.#dialogElement.showModal();
+      this.#showDetails(play);
     }
 
     destroy() {
       this.#closeButton.removeEventListener('click', this.#handleCloseClick);
       this.#watchedButton.removeEventListener('click', this.#handleWatchedClick);
+      this.#frameWrapper.removeEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.removeEventListener('close', this.#handleDialogClose);
       this.#dialogElement.removeEventListener('click', this.#handleBackdropClick);
       this.#unloadPlayer();
+    }
+
+    async #showDetails(play) {
+      try {
+        const { durationSeconds, summary } = await this.#detailsLoader.load(play, { isUrgent: true });
+        if (this.#currentPlay !== play) {
+          return;
+        }
+        this.#renderMeta(play, durationSeconds);
+        this.#summaryElement.textContent = summary === ''
+          ? 'Pas de résumé pour cette captation.'
+          : summary;
+      } catch (detailsError) {
+        if (this.#currentPlay === play) {
+          this.#summaryElement.textContent = 'Résumé indisponible pour le moment.';
+        }
+        if (!isAbortError(detailsError)) {
+          console.warn(`Détails indisponibles pour ${play.identifier}`, detailsError);
+        }
+      }
+    }
+
+    #renderMeta(play, durationSeconds) {
+      this.#metaElement.textContent = [play.creator, play.year, durationSeconds > 0 ? formatDuration(durationSeconds) : '']
+        .filter((metaPart) => metaPart !== '')
+        .join(' · ');
+    }
+
+    #buildPoster(play) {
+      const launchButton = document.createElement('button');
+      launchButton.type = 'button';
+      launchButton.className = 'player-launch';
+
+      const posterImage = document.createElement('img');
+      posterImage.className = 'player-poster';
+      posterImage.src = thumbnailUrl(play);
+      posterImage.alt = '';
+
+      const launchLabel = document.createElement('span');
+      launchLabel.className = 'player-launch-label';
+      launchLabel.textContent = '▶ Lancer la pièce';
+
+      launchButton.append(posterImage, launchLabel);
+      return launchButton;
+    }
+
+    #launchPlayer() {
+      if (this.#currentPlay === null) {
+        return;
+      }
+      const playerFrame = document.createElement('iframe');
+      playerFrame.src = embedUrl(this.#currentPlay);
+      playerFrame.title = `Lecteur : ${this.#currentPlay.title}`;
+      playerFrame.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture';
+      // YouTube refuse de lire une vidéo intégrée sans en-tête Referer (erreur 153).
+      playerFrame.referrerPolicy = 'strict-origin-when-cross-origin';
+      playerFrame.className = 'player-frame';
+      this.#frameWrapper.replaceChildren(playerFrame);
     }
 
     // Retirer l'iframe coupe la lecture : sinon le son continuerait après fermeture.
@@ -490,6 +768,7 @@
   class RideauApp {
     #elements;
     #library = new PersonalLibrary();
+    #detailsLoader = new PlayDetailsLoader();
     #resultsView;
     #playerDialog;
     #searchAbortController = null;
@@ -525,11 +804,13 @@
         gridElement: elements.resultsGrid,
         cardTemplate: elements.cardTemplate,
         library: this.#library,
+        detailsLoader: this.#detailsLoader,
         onOpenPlay: (play) => this.#playerDialog.open(play),
       });
       this.#playerDialog = new PlayerDialog({
         dialogElement: elements.playerDialog,
         library: this.#library,
+        detailsLoader: this.#detailsLoader,
         onPersonalStateChange: (identifier) => this.#resultsView.refreshCard(identifier),
       });
     }
@@ -557,6 +838,7 @@
       this.#elements.loadMoreButton.removeEventListener('click', this.#handleLoadMoreClick);
       this.#resultsView.destroy();
       this.#playerDialog.destroy();
+      this.#detailsLoader.destroy();
     }
 
     #renderCategoryTabs() {
@@ -614,6 +896,7 @@
 
     #startNewSearch() {
       this.#debouncedSearch.cancel();
+      this.#detailsLoader.cancelPending();
       this.#highlightActiveTab();
       this.#state.page = 1;
       this.#state.loadedCount = 0;
