@@ -18,31 +18,21 @@ captations filmées, théâtre radiophonique et lectures LibriVox (domaine publi
 
 ## Lancer l'application
 
-Aucune dépendance, aucun build. Les modules JavaScript exigent juste un serveur HTTP local :
+Double-cliquer sur `index.html` : c'est tout. Aucune installation, aucun serveur.
 
-```bash
-python3 -m http.server 8000
-```
-
-puis ouvrir <http://localhost:8000>.
-
-On peut aussi l'héberger tel quel sur GitHub Pages (Settings → Pages → branche principale).
+(Pour récupérer les fichiers depuis GitHub : bouton **Code → Download ZIP**, puis dézipper.)
 
 ## Structure
 
 ```
-index.html              Page et gabarits HTML
-styles.css              Styles (variables de couleur, thème sombre)
-js/main.js              Point d'entrée : état de l'app et orchestration
-js/config.js            Catégories (requêtes Internet Archive) et liens externes
-js/archiveApi.js        Appels à l'API de recherche d'Internet Archive
-js/personalLibrary.js   Favoris et pièces vues (localStorage)
-js/ui/resultsView.js    Grille de résultats
-js/ui/playerDialog.js   Fenêtre du lecteur
-js/utils.js             debounce, échappement Lucene…
+index.html    Page et gabarits HTML
+styles.css    Styles (variables de couleur, thème sombre)
+js/app.js     Toute la logique, découpée en sections :
+              config, utils, archiveApi, personalLibrary,
+              resultsView, playerDialog, main
 ```
 
 ## Ajouter une catégorie
 
-Ajouter une entrée dans `CATEGORIES` (`js/config.js`) avec une requête au format
+Ajouter une entrée dans `CATEGORIES` (section `config` de `js/app.js`) avec une requête au format
 [recherche avancée d'Internet Archive](https://archive.org/advancedsearch.php).
