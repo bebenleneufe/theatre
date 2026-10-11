@@ -29,6 +29,11 @@
     unreachable: 'unreachable',
   });
   const HTTP_TOO_MANY_REQUESTS = 429;
+  // Connexion directe (WebRTC) : une fois établie, la position part chaque seconde.
+  const DIRECT_STUN_URL = 'stun:stun.l.google.com:19302';
+  const DIRECT_HEARTBEAT_MS = 1000;
+  const DIRECT_ICE_GATHERING_TIMEOUT_MS = 3000;
+  const DIRECT_CONNECT_TIMEOUT_MS = 20 * 1000;
   const CAST_SEEK_STEP_SECONDS = 30;
   const CAST_JUMP_THRESHOLD_SECONDS = 2;
   const SEEK_PREVIEW_INTERVAL_MS = 100;
@@ -904,6 +909,15 @@
       this.#persist();
     }
 
+    openStream(handleMessage, sinceUnixSeconds) {
+      if (this.#topic === null) {
+        return null;
+      }
+      const stream = new EventSource(`${NTFY_ORIGIN}/${encodeURIComponent(this.#topic)}/sse?since=${sinceUnixSeconds}`);
+      stream.onmessage = handleMessage;
+      return stream;
+    }
+
     async publish(message) {
       if (this.#topic === null) {
         return PUBLISH_RESULTS.unreachable;
@@ -938,10 +952,195 @@
     }
   }
 
+  // --- directLink ---
+  // Connexion WebRTC directe téléphone → écran sur le Wi-Fi. ntfy ne sert plus
+  // qu'à se présenter (une offre, une réponse) ; ensuite la position passe en
+  // direct chaque seconde, sans quota ni aller-retour par internet. Si la
+  // connexion ne s'établit pas (Wi-Fi qui isole les appareils, par exemple),
+  // la diffusion continue simplement par ntfy.
+  function createSessionId() {
+    if (typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
+  // Sans « trickle ICE » : on attend que les adresses candidates soient toutes
+  // dans la description avant de l'envoyer, pour tenir en un seul message ntfy.
+  function waitForIceGathering(peerConnection, timeoutMs) {
+    if (peerConnection.iceGatheringState === 'complete') {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timeoutId);
+        peerConnection.removeEventListener('icegatheringstatechange', handleStateChange);
+        resolve();
+      };
+      const handleStateChange = () => {
+        if (peerConnection.iceGatheringState === 'complete') {
+          finish();
+        }
+      };
+      const timeoutId = setTimeout(finish, timeoutMs);
+      peerConnection.addEventListener('icegatheringstatechange', handleStateChange);
+    });
+  }
+
+  class DirectLink {
+    #screenLink;
+    #onStateChange;
+    #peerConnection = null;
+    #dataChannel = null;
+    #signalingStream = null;
+    #sessionId = null;
+    #answerTimeoutId = null;
+    #isOpen = false;
+    #handleSignalingMessage = (sseEvent) => this.#onSignalingMessage(sseEvent);
+
+    constructor({ screenLink, onStateChange }) {
+      this.#screenLink = screenLink;
+      this.#onStateChange = onStateChange;
+    }
+
+    isOpen() {
+      return this.#isOpen;
+    }
+
+    async connect() {
+      this.close();
+      if (typeof RTCPeerConnection === 'undefined') {
+        return;
+      }
+      const sessionId = createSessionId();
+      this.#sessionId = sessionId;
+      try {
+        // « since » rejoue les messages récents : la réponse de l'écran est
+        // reçue même si elle arrive avant que l'abonnement soit établi.
+        this.#signalingStream = this.#screenLink.openStream(this.#handleSignalingMessage, Math.floor(Date.now() / 1000) - 5);
+        const peerConnection = new RTCPeerConnection({ iceServers: [{ urls: DIRECT_STUN_URL }] });
+        this.#peerConnection = peerConnection;
+        const dataChannel = peerConnection.createDataChannel('rideau', { ordered: true });
+        this.#dataChannel = dataChannel;
+        dataChannel.onopen = () => this.#markOpen(sessionId);
+        dataChannel.onclose = () => this.#markLost(sessionId);
+        peerConnection.onconnectionstatechange = () => {
+          if (peerConnection.connectionState === 'failed') {
+            this.#markLost(sessionId);
+          }
+        };
+
+        await peerConnection.setLocalDescription(await peerConnection.createOffer());
+        await waitForIceGathering(peerConnection, DIRECT_ICE_GATHERING_TIMEOUT_MS);
+        if (this.#sessionId !== sessionId) {
+          return;
+        }
+        const publishResult = await this.#screenLink.publish({
+          v: 1,
+          type: 'rtc-offer',
+          session: sessionId,
+          sdp: peerConnection.localDescription.sdp,
+        });
+        if (publishResult !== PUBLISH_RESULTS.delivered) {
+          throw new Error(`Offre non transmise (${publishResult})`);
+        }
+        this.#answerTimeoutId = setTimeout(() => {
+          if (!this.#isOpen && this.#sessionId === sessionId) {
+            this.close();
+          }
+        }, DIRECT_CONNECT_TIMEOUT_MS);
+      } catch (connectError) {
+        console.warn('Connexion directe avec l’écran impossible, passage par internet.', connectError);
+        if (this.#sessionId === sessionId) {
+          this.close();
+        }
+      }
+    }
+
+    send(message) {
+      if (!this.#isOpen || this.#dataChannel?.readyState !== 'open') {
+        return false;
+      }
+      try {
+        this.#dataChannel.send(JSON.stringify(message));
+        return true;
+      } catch (sendError) {
+        console.warn('Envoi direct impossible.', sendError);
+        return false;
+      }
+    }
+
+    // Fermeture voulue (fin de diffusion) : pas de notification de perte.
+    close() {
+      clearTimeout(this.#answerTimeoutId);
+      this.#answerTimeoutId = null;
+      this.#closeSignaling();
+      if (this.#dataChannel !== null) {
+        this.#dataChannel.onopen = null;
+        this.#dataChannel.onclose = null;
+        this.#dataChannel.close();
+      }
+      if (this.#peerConnection !== null) {
+        this.#peerConnection.onconnectionstatechange = null;
+        this.#peerConnection.close();
+      }
+      this.#dataChannel = null;
+      this.#peerConnection = null;
+      this.#sessionId = null;
+      this.#isOpen = false;
+    }
+
+    #markOpen(sessionId) {
+      if (this.#sessionId !== sessionId) {
+        return;
+      }
+      clearTimeout(this.#answerTimeoutId);
+      this.#closeSignaling();
+      this.#isOpen = true;
+      this.#onStateChange(true);
+    }
+
+    #markLost(sessionId) {
+      if (this.#sessionId !== sessionId) {
+        return;
+      }
+      const wasOpen = this.#isOpen;
+      this.close();
+      if (wasOpen) {
+        this.#onStateChange(false);
+      }
+    }
+
+    #closeSignaling() {
+      this.#signalingStream?.close();
+      this.#signalingStream = null;
+    }
+
+    async #onSignalingMessage(sseEvent) {
+      try {
+        const ntfyEvent = JSON.parse(sseEvent.data);
+        if (ntfyEvent?.event !== 'message') {
+          return;
+        }
+        const signalingMessage = JSON.parse(ntfyEvent.message);
+        const isOurAnswer = signalingMessage?.v === 1
+          && signalingMessage.type === 'rtc-answer'
+          && signalingMessage.session === this.#sessionId
+          && typeof signalingMessage.sdp === 'string';
+        if (!isOurAnswer || this.#peerConnection === null || this.#peerConnection.signalingState !== 'have-local-offer') {
+          return;
+        }
+        await this.#peerConnection.setRemoteDescription({ type: 'answer', sdp: signalingMessage.sdp });
+      } catch (signalingError) {
+        console.warn('Réponse de l’écran illisible.', signalingError);
+      }
+    }
+  }
+
   function describeCastStatus(publishResult) {
     switch (publishResult) {
       case PUBLISH_RESULTS.delivered:
-        return 'Sur l’écran du salon · le son reste sur ce téléphone';
+        return 'Via internet · le son reste sur ce téléphone';
       case PUBLISH_RESULTS.quotaExceeded:
         return 'Quota de messages du jour atteint (250 par connexion). Passez le téléphone en 4G/5G, ou réessayez demain.';
       default:
@@ -966,6 +1165,7 @@
     #elapsedElement;
     #totalElement;
     #stopButton;
+    #directLink;
     #play = null;
     #snapshot = { seconds: 0, durationSeconds: 0, isPlaying: false, receivedAt: 0 };
     #heartbeatIntervalId = null;
@@ -1006,6 +1206,10 @@
       this.#screenLink = screenLink;
       this.#sendPlayerCommand = sendPlayerCommand;
       this.#onActiveChange = onActiveChange;
+      this.#directLink = new DirectLink({
+        screenLink,
+        onStateChange: () => this.#onDirectLinkChange(),
+      });
 
       this.#toggleButton.addEventListener('click', this.#handleToggleClick);
       this.#backButton.addEventListener('click', this.#handleBackClick);
@@ -1029,12 +1233,14 @@
         receivedAt: Date.now(),
       };
       this.#panelElement.hidden = false;
-      this.#setStatus('Sur l’écran du salon · le son reste sur ce téléphone');
+      this.#setStatus('Connexion à l’écran du salon…');
       this.#renderRemote();
       this.#acquireWakeLock();
+      // Le premier message passe par ntfy pour ouvrir la pièce sans attendre ;
+      // la connexion directe prend le relais dès qu'elle est établie.
       this.#publishState();
-      clearInterval(this.#heartbeatIntervalId);
-      this.#heartbeatIntervalId = setInterval(() => this.#publishState(), CAST_HEARTBEAT_MS);
+      this.#restartHeartbeat();
+      this.#directLink.connect();
       this.#onActiveChange(true);
     }
 
@@ -1043,8 +1249,12 @@
         return;
       }
       if (notifyScreen) {
-        this.#screenLink.publish({ v: 1, type: 'stop' });
+        const stopMessage = { v: 1, type: 'stop' };
+        if (!this.#directLink.send(stopMessage)) {
+          this.#screenLink.publish(stopMessage);
+        }
       }
+      this.#directLink.close();
       clearInterval(this.#heartbeatIntervalId);
       this.#heartbeatIntervalId = null;
       this.#throttledPublish.cancel();
@@ -1083,13 +1293,14 @@
 
       const hasJumped = seconds !== null && Math.abs(seconds - expectedSeconds) > CAST_JUMP_THRESHOLD_SECONDS;
       if (wasPlaying !== this.#snapshot.isPlaying || hasJumped) {
-        this.#throttledPublish();
+        this.#requestPublish();
       }
       this.#renderRemote();
     }
 
     destroy() {
       this.stop();
+      this.#directLink.close();
       this.#toggleButton.removeEventListener('click', this.#handleToggleClick);
       this.#backButton.removeEventListener('click', this.#handleBackClick);
       this.#forwardButton.removeEventListener('click', this.#handleForwardClick);
@@ -1104,11 +1315,37 @@
       return isPlaying ? seconds + (Date.now() - receivedAt) / 1000 : seconds;
     }
 
+    // En direct, rien ne coûte : on prévient l'écran tout de suite. Par ntfy,
+    // les changements rapprochés sont regroupés pour ménager le quota.
+    #requestPublish() {
+      if (this.#directLink.isOpen()) {
+        this.#publishState();
+      } else {
+        this.#throttledPublish();
+      }
+    }
+
+    #restartHeartbeat() {
+      clearInterval(this.#heartbeatIntervalId);
+      const heartbeatMs = this.#directLink.isOpen() ? DIRECT_HEARTBEAT_MS : CAST_HEARTBEAT_MS;
+      this.#heartbeatIntervalId = setInterval(() => this.#publishState(), heartbeatMs);
+    }
+
+    #onDirectLinkChange() {
+      if (!this.isActive()) {
+        return;
+      }
+      this.#restartHeartbeat();
+      // Connexion directe perdue : l'écran doit savoir tout de suite qu'il
+      // repasse par ntfy, sinon il croirait le téléphone parti.
+      this.#publishState();
+    }
+
     async #publishState() {
       if (!this.isActive()) {
         return;
       }
-      const publishResult = await this.#screenLink.publish({
+      const stateMessage = {
         v: 1,
         type: 'state',
         youtubeId: this.#play.youtubeId,
@@ -1116,7 +1353,12 @@
         position: Math.round(this.#estimateSeconds() * 10) / 10,
         playing: this.#snapshot.isPlaying,
         sentAt: Date.now(),
-      });
+      };
+      if (this.#directLink.send(stateMessage)) {
+        this.#setStatus('Connexion directe (Wi-Fi) · le son reste sur ce téléphone');
+        return;
+      }
+      const publishResult = await this.#screenLink.publish(stateMessage);
       if (this.isActive()) {
         this.#setStatus(describeCastStatus(publishResult));
       }

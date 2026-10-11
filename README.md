@@ -21,8 +21,10 @@ officielles, signalées par un badge orange car elles peuvent disparaître.
 - **Mes données** : export / import d'un fichier de sauvegarde (fusion, rien n'est effacé)
 - **Écran du salon** : diffuse l'image sur le tableau ScreenDisplay (Fully Kiosk) pendant que le
   son reste sur le téléphone, avec un écran télécommande (pause, ±30 s, barre de progression).
-  Le téléphone publie sa position sur un canal ntfy, le tableau s'y recale. Liaison une seule
-  fois via « Écran du salon » en bas de page, ou en ouvrant l'appli avec `#ecran=<canal>`.
+  Les deux appareils se présentent par un canal ntfy (2 à 4 messages), puis la position passe
+  chaque seconde par une connexion directe WebRTC sur le Wi-Fi ; si elle échoue, la diffusion
+  continue par ntfy (messages aux changements et toutes les 2 minutes, quota de 250/jour).
+  Liaison une seule fois via « Écran du salon » en bas de page, ou avec `#ecran=<canal>`.
 - Liens vers d'autres plateformes gratuites (France.tv, ARTE, Comédie-Française)
 - Thème sombre « salle obscure », pensé pour le mobile
 
