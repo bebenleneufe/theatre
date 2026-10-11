@@ -30,6 +30,17 @@
   // 2 s suffit : l'écran extrapole la position entre deux messages.
   const RELAY_HEARTBEAT_MS = 2000;
   const SCREEN_TEST_TIMEOUT_MS = 6000;
+  const SCREEN_QUALITY_LABELS = Object.freeze({
+    tiny: '144p',
+    small: '240p',
+    medium: '360p',
+    large: '480p',
+    hd720: '720p',
+    hd1080: '1080p',
+    hd1440: '1440p',
+    hd2160: '4K',
+    highres: '4K+',
+  });
   const PUBLISH_RESULTS = Object.freeze({
     delivered: 'delivered',
     unreachable: 'unreachable',
@@ -1109,6 +1120,7 @@
   class DirectLink {
     #screenLink;
     #onStateChange;
+    #onMessage;
     #peerConnection = null;
     #dataChannel = null;
     #unsubscribeSignaling = null;
@@ -1117,9 +1129,10 @@
     #isOpen = false;
     #handleSignalingMessage = (signalingMessage) => this.#onSignalingMessage(signalingMessage);
 
-    constructor({ screenLink, onStateChange }) {
+    constructor({ screenLink, onStateChange, onMessage }) {
       this.#screenLink = screenLink;
       this.#onStateChange = onStateChange;
+      this.#onMessage = onMessage;
     }
 
     isOpen() {
@@ -1141,6 +1154,7 @@
         this.#dataChannel = dataChannel;
         dataChannel.onopen = () => this.#markOpen(sessionId);
         dataChannel.onclose = () => this.#markLost(sessionId);
+        dataChannel.onmessage = (messageEvent) => this.#receive(messageEvent.data);
         peerConnection.onconnectionstatechange = () => {
           if (peerConnection.connectionState === 'failed') {
             this.#markLost(sessionId);
@@ -1195,6 +1209,7 @@
       if (this.#dataChannel !== null) {
         this.#dataChannel.onopen = null;
         this.#dataChannel.onclose = null;
+        this.#dataChannel.onmessage = null;
         this.#dataChannel.close();
       }
       if (this.#peerConnection !== null) {
@@ -1228,6 +1243,14 @@
       }
     }
 
+    #receive(rawMessage) {
+      try {
+        this.#onMessage(JSON.parse(rawMessage));
+      } catch (parseError) {
+        console.warn('Message direct illisible reçu de l’écran.', parseError);
+      }
+    }
+
     #closeSignaling() {
       this.#unsubscribeSignaling?.();
       this.#unsubscribeSignaling = null;
@@ -1249,6 +1272,40 @@
     }
   }
 
+  function formatScreenQuality(qualityLevel) {
+    return SCREEN_QUALITY_LABELS[qualityLevel] ?? null;
+  }
+
+  // Les niveaux arrivent du meilleur au moins bon ; « auto » n'en est pas un.
+  function describeScreenQuality({ quality, availableQualities }) {
+    const playedLabel = formatScreenQuality(quality);
+    if (playedLabel === null) {
+      return '';
+    }
+    const bestLabel = availableQualities.map(formatScreenQuality).find((label) => label !== null) ?? null;
+    if (bestLabel === null) {
+      return `Image sur l’écran : ${playedLabel}`;
+    }
+    if (bestLabel === playedLabel) {
+      return `Image sur l’écran : ${playedLabel} (le maximum de cette vidéo)`;
+    }
+    return `Image sur l’écran : ${playedLabel} · la vidéo existe en ${bestLabel}`;
+  }
+
+  function parseScreenInfo(relayedMessage) {
+    const isScreenInfo = relayedMessage?.v === 1
+      && relayedMessage.type === 'screen-info'
+      && typeof relayedMessage.quality === 'string'
+      && Array.isArray(relayedMessage.availableQualities);
+    if (!isScreenInfo) {
+      return null;
+    }
+    return {
+      quality: relayedMessage.quality,
+      availableQualities: relayedMessage.availableQualities.filter((level) => typeof level === 'string'),
+    };
+  }
+
   function describeCastStatus(publishResult) {
     return publishResult === PUBLISH_RESULTS.delivered
       ? 'Via le relais internet · le son reste sur ce téléphone'
@@ -1265,6 +1322,8 @@
     #onActiveChange;
     #panelElement;
     #statusElement;
+    #screenQualityElement;
+    #unsubscribeRelay = null;
     #toggleButton;
     #backButton;
     #forwardButton;
@@ -1302,6 +1361,7 @@
     constructor({ panelElement, screenLink, sendPlayerCommand, onActiveChange }) {
       this.#panelElement = panelElement;
       this.#statusElement = panelElement.querySelector('#remote-status');
+      this.#screenQualityElement = panelElement.querySelector('#remote-screen-quality');
       this.#toggleButton = panelElement.querySelector('#remote-toggle');
       this.#backButton = panelElement.querySelector('#remote-back');
       this.#forwardButton = panelElement.querySelector('#remote-forward');
@@ -1315,6 +1375,7 @@
       this.#directLink = new DirectLink({
         screenLink,
         onStateChange: () => this.#onDirectLinkChange(),
+        onMessage: (screenMessage) => this.#onScreenMessage(screenMessage),
       });
 
       this.#toggleButton.addEventListener('click', this.#handleToggleClick);
@@ -1340,6 +1401,9 @@
       };
       this.#panelElement.hidden = false;
       this.#setStatus('Connexion à l’écran du salon…');
+      this.#screenQualityElement.textContent = '';
+      this.#unsubscribeRelay?.();
+      this.#unsubscribeRelay = this.#screenLink.subscribe((screenMessage) => this.#onScreenMessage(screenMessage));
       this.#renderRemote();
       this.#acquireWakeLock();
       // Le premier message passe par le relais pour ouvrir la pièce sans attendre ;
@@ -1362,6 +1426,8 @@
         }
       }
       this.#directLink.close();
+      this.#unsubscribeRelay?.();
+      this.#unsubscribeRelay = null;
       this.#screenLink.disconnect();
       clearInterval(this.#heartbeatIntervalId);
       this.#heartbeatIntervalId = null;
@@ -1436,6 +1502,13 @@
       // Connexion directe perdue : l'écran doit savoir tout de suite qu'il
       // repasse par le relais, sinon il croirait le téléphone parti.
       this.#publishState();
+    }
+
+    #onScreenMessage(screenMessage) {
+      const screenInfo = parseScreenInfo(screenMessage);
+      if (screenInfo !== null && this.isActive()) {
+        this.#screenQualityElement.textContent = describeScreenQuality(screenInfo);
+      }
     }
 
     async #publishState() {

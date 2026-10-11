@@ -1327,6 +1327,16 @@ img {
   animation: remote-pulse 1.6s ease-in-out infinite;
 }
 
+.remote-screen-quality {
+  margin: 4px 0 0 19px;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.remote-screen-quality:empty {
+  display: none;
+}
+
 @keyframes remote-pulse {
   50% {
     box-shadow: 0 0 0 7px rgb(224 74 100 / 0);
