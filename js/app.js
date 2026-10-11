@@ -6,6 +6,7 @@
   // --- config ---
   const PAGE_SIZE = 24;
   const SEARCH_DEBOUNCE_MS = 400;
+  const MINIMUM_YEAR = 2000;
 
   // Requêtes Lucene d'Internet Archive, ajustées à la main : les sujets y sont saisis
   // librement par les contributeurs, d'où les nombreuses variantes orthographiques.
@@ -118,8 +119,11 @@
   }
 
   function buildQuery(categoryQuery, searchText) {
+    const recentOnlyClause = `year:[${MINIMUM_YEAR} TO 9999]`;
     const textClause = buildTextClause(searchText);
-    return textClause === '' ? `(${categoryQuery})` : `(${categoryQuery}) AND ${textClause}`;
+    return [`(${categoryQuery})`, recentOnlyClause, textClause]
+      .filter((clause) => clause !== '')
+      .join(' AND ');
   }
 
   function toPlay(document, badge) {
