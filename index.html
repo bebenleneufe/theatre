@@ -7,7 +7,9 @@
   <meta name="description" content="Catalogue personnel de pièces de théâtre disponibles gratuitement en ligne.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AD%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
+  <!-- L'ordre compte : app.js écoute l'événement que plays-data.js émet en s'exécutant. -->
   <script src="js/app.js" defer></script>
+  <script src="js/plays-data.js" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -17,17 +19,68 @@
 
   <main class="layout">
     <section class="controls" aria-label="Recherche">
-      <label class="search">
-        <span class="visually-hidden">Rechercher une pièce, un auteur…</span>
-        <input id="search-input" type="search" placeholder="Molière, Feydeau, Godot…" autocomplete="off">
-      </label>
+      <div class="search-row">
+        <label class="search">
+          <span class="visually-hidden">Rechercher une pièce, un auteur…</span>
+          <input id="search-input" type="search" placeholder="Molière, Feydeau, Godot…" autocomplete="off">
+        </label>
+        <button id="surprise-button" class="button button-ghost surprise-button" type="button">🎲 Surprends-moi</button>
+      </div>
 
       <div id="category-tabs" class="tabs" role="tablist" aria-label="Catégories"></div>
 
-      <div class="secondary-controls">
-        <label class="checkbox">
-          <input id="favorites-only" type="checkbox"> Mes favoris uniquement
+      <div id="curated-filters" class="filters" hidden>
+        <label class="select">
+          Langue
+          <select id="language-filter" data-filter="language">
+            <option value="all">Toutes</option>
+            <option value="fr">Français</option>
+            <option value="en">Anglais</option>
+            <option value="autre">Autre ou sans paroles</option>
+          </select>
         </label>
+        <label class="select">
+          Durée
+          <select id="duration-filter" data-filter="duration">
+            <option value="all">Toutes</option>
+            <option value="short">Moins de 1 h 30</option>
+            <option value="medium">1 h 30 à 2 h 30</option>
+            <option value="long">Plus de 2 h 30</option>
+          </select>
+        </label>
+        <label class="select">
+          Genre
+          <select id="genre-filter" data-filter="genre">
+            <option value="all">Tous</option>
+            <option value="comedie">Comédie</option>
+            <option value="classique">Classique</option>
+            <option value="contemporain">Contemporain</option>
+          </select>
+        </label>
+        <label class="select">
+          Source
+          <select id="source-filter" data-filter="source">
+            <option value="all">Toutes</option>
+            <option value="official">Officielles</option>
+            <option value="unofficial">Non officielles</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="secondary-controls">
+        <div class="secondary-controls-group">
+          <label class="select">
+            Afficher
+            <select id="list-mode-select">
+              <option value="all">Tout le catalogue</option>
+              <option value="favorites">Mes favoris</option>
+              <option value="watchLater">À voir plus tard</option>
+            </select>
+          </label>
+          <label class="checkbox">
+            <input id="hide-watched" type="checkbox"> Masquer les pièces vues
+          </label>
+        </div>
         <label class="select">
           Trier par
           <select id="sort-select">
@@ -50,6 +103,23 @@
       <h2 id="external-links-title">Ailleurs, gratuitement</h2>
       <ul id="external-links-list" class="link-list"></ul>
     </section>
+
+    <section class="my-data" aria-labelledby="my-data-title">
+      <h2 id="my-data-title">Mes données</h2>
+      <p class="my-data-help">
+        Favoris, « À voir plus tard », pièces vues et lectures en cours sont enregistrés dans ce navigateur uniquement.
+        Exportez-les pour les sauvegarder ou les copier sur un autre appareil ; l’import fusionne sans rien effacer.
+      </p>
+      <div class="my-data-actions">
+        <button id="export-button" class="button button-ghost" type="button">Exporter mes données</button>
+        <label class="button button-ghost file-button">
+          Importer une sauvegarde
+          <input id="import-input" class="visually-hidden" type="file" accept="application/json,.json">
+        </label>
+        <button id="unhide-button" class="button button-ghost" type="button" disabled>Réafficher les résultats masqués (0)</button>
+      </div>
+      <p id="data-status" class="status" role="status" aria-live="polite"></p>
+    </section>
   </main>
 
   <dialog id="player-dialog" class="player">
@@ -64,23 +134,36 @@
     </div>
     <div class="player-footer">
       <a id="player-source-link" target="_blank" rel="noopener noreferrer">Voir la source ↗</a>
-      <button id="player-watched" class="button button-ghost" type="button"></button>
+      <div class="player-footer-buttons">
+        <button id="player-watch-later" class="button button-ghost" type="button" aria-pressed="false"></button>
+        <button id="player-watched" class="button button-ghost" type="button" aria-pressed="false"></button>
+      </div>
     </div>
   </dialog>
 
   <template id="card-template">
     <li class="card">
-      <button class="card-open" type="button">
+      <button class="card-open" type="button" data-action="open">
         <img class="card-thumbnail" alt="" loading="lazy" decoding="async">
         <span class="card-badge"></span>
         <span class="card-watched-badge" hidden>Vu</span>
         <span class="card-duration" hidden></span>
+        <span class="card-unavailable" hidden>Vidéo retirée</span>
+        <span class="card-progress" hidden><span class="card-progress-bar"></span></span>
       </button>
       <div class="card-body">
         <h3 class="card-title"></h3>
         <p class="card-meta"></p>
       </div>
-      <button class="card-favorite icon-button" type="button" aria-pressed="false" aria-label="Ajouter aux favoris">☆</button>
+      <div class="card-actions">
+        <button class="card-favorite icon-button" type="button" data-action="favorite" aria-pressed="false" aria-label="Ajouter aux favoris">☆</button>
+        <button class="card-watch-later icon-button" type="button" data-action="watch-later" aria-pressed="false" aria-label="Ajouter à « À voir plus tard »">
+          <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z"></path>
+          </svg>
+        </button>
+        <button class="card-hide icon-button" type="button" data-action="hide" aria-label="Masquer ce résultat" title="Masquer ce résultat">⊘</button>
+      </div>
     </li>
   </template>
 </body>

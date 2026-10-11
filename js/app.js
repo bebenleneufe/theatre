@@ -7,6 +7,22 @@
   const PAGE_SIZE = 24;
   const SEARCH_DEBOUNCE_MS = 400;
   const MINIMUM_YEAR = 2000;
+  const PROGRESS_SAVE_INTERVAL_MS = 5000;
+  const WATCHED_COMPLETION_RATIO = 0.95;
+  const MINIMUM_RESUME_SECONDS = 60;
+  const BLOB_URL_REVOKE_DELAY_MS = 1000;
+  const CURATED_PLAYS_EVENT = 'rideau:curated-plays';
+
+  // Pour une vidéo supprimée ou privée, YouTube sert une vignette de remplacement
+  // de 120 px de large à la place de la vraie (480 px) : c'est notre seul indice
+  // côté navigateur, l'API oEmbed ne répondant pas aux requêtes cross-origin.
+  const REMOVED_VIDEO_THUMBNAIL_WIDTH = 120;
+
+  // Les sujets sont libres sur Internet Archive : comédies musicales, « proshots »
+  // et spectacles tirés d'animes s'y glissent sous l'étiquette « théâtre ».
+  const ARCHIVE_EXCLUSION_CLAUSE = 'NOT (title:(proshot OR musical OR "comédie musicale" OR "opéra rock" OR "opera rock" '
+    + 'OR anime OR "english subs" OR "eng subs" OR "english sub" OR takarazuka OR "ace attorney" OR "the stage") '
+    + 'OR subject:(anime OR manga OR musical OR "comédie musicale" OR "opéra rock" OR "musical theatre"))';
 
   // Requêtes Lucene d'Internet Archive, ajustées à la main : les sujets y sont saisis
   // librement par les contributeurs, d'où les nombreuses variantes orthographiques.
@@ -48,259 +64,26 @@
     },
   ];
 
-  // Captations intégrales vérifiées une à une : intégrables, en couleur, tournées après 2000.
-  // isUnofficial marque les ré-uploads de chaînes sans lien avec les ayants droit :
-  // ils peuvent être retirés à tout moment, d'où le badge qui les signale.
-  // L'année n'est renseignée que lorsqu'elle a pu être confirmée.
-  const CURATED_PLAYS = [
-    {
-      youtubeId: 'lgiuUY3zWfY', title: 'Îles flottantes', creator: 'Kenza Berrada, d’après Brigitte Giraud · Odéon', year: '2026', duration: '1:10:52',
-      summary: 'Un lycéen, au fil d’un exposé, finit par cesser de mentir et dire qui il est. Librement adapté du roman Jour de courage de Brigitte Giraud et créé avec une vingtaine d’adolescents dans le cadre du programme « Adolescence et territoire(s) » de l’Odéon.',
-    },
-    { youtubeId: 'kJhd3q7wZE4', title: 'Le Chant d’ivresse', creator: 'Odéon – Théâtre de l’Europe', year: '', duration: '1:32:55', summary: '' },
-    {
-      youtubeId: '_BUbSJ-teQ0', title: 'Combat de nègre et de chiens', creator: 'Koltès · Cie Kobal’t, Théâtre de la Bastille', year: '2022', duration: '1:59:15',
-      summary: 'Sur un chantier en Afrique de l’Ouest, à la tombée de la nuit, Alboury vient réclamer le corps de son frère, mort sur le chantier. Face à lui : Horn, le chef de chantier, Cal, l’ingénieur, et Léone, que Horn vient de faire venir de Paris. Mise en scène de Mathieu Boisliveau.',
-    },
-    {
-      youtubeId: '2Bxz_-9VDlc', title: 'Un sentiment de vie', creator: 'Claudine Galea · Cie Rabeux, Théâtre de la Bastille', year: '', duration: '1:15:23',
-      summary: 'Une autrice monte sur scène et trouve enfin les mots pour dire à son père, des années après sa mort, la force de son amour. Un récit traversé par les traces de la guerre d’Algérie, où la musique finit par relier le père et la fille. Mise en scène de Jean-Michel Rabeux.',
-    },
-    { youtubeId: 'eG_DjSg5HQ0', title: 'Les Derniers Jours', creator: 'Mise en scène Jean-Michel Rabeux · Cie Rabeux', year: '', duration: '1:24:02', summary: '' },
-    {
-      youtubeId: 'R5lwmbQ3eQk', title: 'Comme il vous plaira', creator: 'Shakespeare · Théâtre du Nord', year: '2018', duration: '2:37:38',
-      summary: 'Chassée de la cour par son oncle usurpateur, Rosalinde se réfugie dans la forêt d’Arden, déguisée en jeune homme, avec sa cousine Célia. Elle y retrouve Orlando, amoureux d’elle, qui ne la reconnaît pas. Une comédie de Shakespeare sur l’amour et le travestissement.',
-    },
-    {
-      youtubeId: 'ISzpB9gk2gg', title: 'Le Tartuffe ou l’Imposteur (lecture à la table)', creator: 'Molière · Comédie-Française', year: '', duration: '1:55:31',
-      summary: 'Orgon, sous l’emprise du faux dévot Tartuffe, est prêt à lui donner sa fille et ses biens. Sa femme Elmire va tendre un piège pour démasquer l’imposteur. Lecture filmée par la troupe de la Comédie-Française dans sa série « Théâtre à la table ».',
-    },
-    {
-      youtubeId: '9pZecJzEu8U', title: 'Les Fausses Confidences (lecture à la table)', creator: 'Marivaux · Comédie-Française', year: '', duration: '1:48:12',
-      summary: 'Dorante, jeune homme ruiné, entre comme intendant chez la riche veuve Araminte, dont il est amoureux. Son ancien valet Dubois orchestre une série de mensonges pour qu’elle tombe amoureuse de lui. Lecture filmée par la troupe de la Comédie-Française.',
-    },
-    {
-      youtubeId: 'Bv-YuTjXjhc', title: 'Le Menteur', creator: 'Corneille · Théâtre du Lyon', year: '', duration: '1:45:35',
-      summary: 'Fraîchement arrivé à Paris, le jeune Dorante s’invente exploits et aventures pour séduire, et se trompe sur le nom de la femme qu’il aime. Ses mensonges s’enchaînent jusqu’à l’emmêler complètement. Comédie de Corneille.',
-    },
-    {
-      youtubeId: 'na-kfkhTYQI', title: 'Cyrano de Bergerac', creator: 'Rostand · Cie du Berger', year: '2012', duration: '3:12:03',
-      summary: 'Cyrano, poète et bretteur au nez immense, aime en secret sa cousine Roxane. Elle s’éprend du beau Christian, et Cyrano l’aide à la séduire en lui prêtant ses mots.',
-    },
-    {
-      youtubeId: 'gekAlcby5xQ', title: 'Knock', creator: 'Jules Romains · Cie du Berger', year: '', duration: '2:17:20',
-      summary: 'Le docteur Knock reprend le cabinet d’un village de montagne où personne n’est jamais malade. Il entreprend de convaincre chaque habitant qu’il est un malade qui s’ignore.',
-    },
-    {
-      youtubeId: 'mBqQv0tV6ks', title: 'Henry VI', creator: 'Shakespeare · Machine Théâtre, Odéon', year: '2009', duration: '1:29:40',
-      summary: 'Après la mort d’Henry V, le jeune roi Henry VI voit l’Angleterre se déchirer entre les maisons d’York et de Lancastre : c’est le début de la guerre des Deux-Roses.',
-    },
-    {
-      youtubeId: 'V6dqwQUCrV8', title: 'Lorenzaccio', creator: 'Musset · Cie Philippe Wiart', year: '2009', duration: '1:55:42',
-      summary: 'Florence, 1537. Lorenzo de Médicis, compagnon de débauche du duc Alexandre, passe pour un lâche. Il prépare en secret l’assassinat du tyran.',
-    },
-    {
-      youtubeId: '6yC3Uh9Q5j8', title: 'L’Île des esclaves', creator: 'Marivaux · Théâtre de la vallée', year: '', duration: '1:14:05',
-      summary: 'Après un naufrage, deux maîtres et leurs valets échouent sur une île gouvernée par d’anciens esclaves. La loi de l’île les oblige à échanger leurs rôles.',
-    },
-    { youtubeId: '6Z2wTrQXoW4', title: 'Le Misanthrope à tout prix', creator: 'Cie du Plateau Libre', year: '', duration: '1:15:11', summary: '' },
-    {
-      youtubeId: '6GZksuQggng', title: 'Le Mont Analogue', creator: 'D’après René Daumal · Temps Blancs', year: '', duration: '1:27:14',
-      summary: 'D’après le roman inachevé de René Daumal : une petite expédition part à la recherche d’une montagne invisible qui relierait la Terre au Ciel.',
-    },
-    {
-      youtubeId: 'IMs6bi0J-fA', title: 'L’Espèce humaine ou l’Inimaginable', creator: 'D’après Robert Antelme · Théâtre Amer', year: '', duration: '1:17:44',
-      summary: 'D’après le récit de Robert Antelme, résistant déporté en 1944, sur sa détention dans un camp de travail nazi et sur ce qui reste d’humain quand tout est fait pour le nier.',
-    },
-    { youtubeId: 'TsboxpFnPrE', title: 'My Story', creator: 'Céline Ohrel · Cie Diplex', year: '', duration: '1:34:44', summary: '' },
-    {
-      youtubeId: '6XSZpF525Y0', title: 'Le Roi Lear', creator: 'Shakespeare · Mathieu Coblentz, Théâtre Amer', year: '2025', duration: '2:14:32',
-      summary: 'Le vieux roi Lear veut abandonner le pouvoir et partager son royaume entre ses filles, à condition qu’elles lui déclarent publiquement leur amour. Une version épique, entre faste baroque et cabaret glam rock, avec sept comédiens-musiciens. Jouée au Théâtre du Soleil.',
-    },
-    {
-      youtubeId: '3uc_JSJPTgU', title: 'La Mouette', creator: 'Tchekhov · Cie Kobal’t', year: '', duration: '1:46:41',
-      summary: 'Dans une propriété à la campagne, le jeune Treplev fait jouer sa pièce d’avant-garde par Nina, dont il est amoureux. Mais Nina rêve de gloire et se tourne vers Trigorine, écrivain célèbre et amant de la mère de Treplev.',
-    },
-    {
-      youtubeId: '1-W0HpdMVvM', title: 'Britannicus', creator: 'Racine · Cie du Berger', year: '2024', duration: '2:20:32',
-      summary: 'Le jeune empereur Néron fait enlever Junie, promise à son demi-frère Britannicus, et cherche à s’affranchir de sa mère Agrippine. La naissance d’un tyran.',
-    },
-    {
-      youtubeId: 'XjAWavSmbkg', title: 'L’École des femmes', creator: 'Molière · Jean-Marc Chotteau, La Virgule', year: '', duration: '2:10:59',
-      summary: 'Arnolphe a fait élever Agnès dans l’ignorance pour l’épouser sans risque d’être trompé. Mais elle tombe amoureuse du jeune Horace, qui fait d’Arnolphe son confident sans savoir qui il est.',
-    },
-    {
-      youtubeId: 'tZ5Pl6Kso0U', title: 'Le Bourgeois gentilhomme', creator: 'Molière et Lully · Opéra Royal de Versailles', year: '', duration: '2:45:20',
-      summary: 'Monsieur Jourdain, riche bourgeois, veut à tout prix devenir gentilhomme : leçons de danse, de musique, d’escrime et de philosophie, jusqu’à une cérémonie turque grotesque. Comédie-ballet avec la musique de Lully.',
-    },
-    {
-      youtubeId: 'RDoEtysSBqY', title: 'Les Amants magnifiques', creator: 'Molière et Lully · Les Malins Plaisirs', year: '', duration: '2:35:52',
-      summary: 'En Thessalie, deux princes rivalisent de fêtes somptueuses pour obtenir la main de la princesse Ériphile, qui aime en secret Sostrate, un simple général. Comédie-ballet mise en scène par Vincent Tavernier.',
-    },
-    {
-      youtubeId: 'ekAG1dgCCYQ', title: 'Le Dindon', creator: 'Feydeau · Cie du Berger', year: '', duration: '3:07:04',
-      summary: 'Lucienne, épouse fidèle de Vatelin, a juré de le tromper le jour où il la tromperait. Deux séducteurs, Pontagnac et Rédillon, guettent ce moment. Vaudeville de Feydeau.',
-    },
-    {
-      youtubeId: '_9WXMdlV4tI', title: 'Le Dindon', creator: 'Feydeau · La Comédie des Ternes', year: '', duration: '2:19:26',
-      summary: 'Lucienne, épouse fidèle de Vatelin, a juré de le tromper le jour où il la tromperait. Deux séducteurs, Pontagnac et Rédillon, guettent ce moment. Vaudeville de Feydeau.',
-    },
-    {
-      youtubeId: 'VBzB7cuQZvM', title: 'La Dispute', creator: 'Marivaux · Théâtre Olympia, CDN de Tours', year: '', duration: '1:05:48',
-      summary: 'Qui, de l’homme ou de la femme, a été infidèle le premier ? Pour trancher, un prince et sa maîtresse observent quatre jeunes gens élevés à l’écart du monde, qui se rencontrent pour la première fois.',
-    },
-    {
-      youtubeId: 'pcgyT_cPyvQ', title: 'La Cantatrice chauve', creator: 'Ionesco · Cie de la Toque Flamboyante', year: '2026', duration: '1:09:06',
-      summary: 'Dans un salon anglais, les Smith reçoivent les Martin. Leurs banalités dérapent peu à peu vers l’absurde le plus complet. La pièce fondatrice du théâtre de l’absurde.',
-    },
-    {
-      youtubeId: '7c6ehafEvyg', title: 'En attendant Godot', creator: 'Beckett · Écailles Productions', year: '', duration: '2:31:13',
-      summary: 'Au bord d’une route, près d’un arbre, Vladimir et Estragon attendent un certain Godot, qui ne vient jamais.',
-    },
-    {
-      youtubeId: '9_Dm6tje-eg', title: 'Je suis encore en vie', creator: 'Jacques Allaire · Le Tarmac', year: '2014', duration: '58:59',
-      summary: 'Un spectacle presque sans paroles, porté par les corps : une femme sous l’autorité masculine, sous l’ombre de la poétesse afghane Nadia Anjuman, tuée par son mari. Avec Anissa Daoud et Jacques Allaire.',
-    },
-    { youtubeId: '8M1UvkqVQrM', title: 'Huit minutes-lumière', creator: 'Compagnie Inachevée', year: '2022', duration: '2:08:21', summary: '' },
-    { youtubeId: '7912YrR9Pw4', title: 'Chère Amazone', creator: 'Compagnie en Amazone', year: '2015', duration: '1:06:38', summary: '' },
-    {
-      youtubeId: '1OU0cuGuPSk', title: 'Macbeth – 1re partie (EN)', creator: 'Shakespeare · Teller et Aaron Posner, Folger Theatre', year: '2008', duration: '1:09:39',
-      summary: 'Poussé par la prophétie de trois sorcières et par l’ambition de sa femme, le général Macbeth assassine le roi Duncan pour prendre sa place. Mise en scène du magicien Teller et d’Aaron Posner, avec des effets d’illusion. En anglais.',
-    },
-    {
-      youtubeId: 'GLc3w-yp3wk', title: 'Macbeth – 2e partie (EN)', creator: 'Shakespeare · Teller et Aaron Posner, Folger Theatre', year: '2008', duration: '54:40',
-      summary: 'Suite et fin : devenu roi, Macbeth s’enfonce dans le crime et la paranoïa. En anglais.',
-    },
-    {
-      youtubeId: 'wBWsaO7wgnQ', title: 'The Tempest (EN)', creator: 'Shakespeare · The Lord Chamberlain’s Men', year: '2018', duration: '1:56:28',
-      summary: 'Prospero, duc de Milan détrôné et exilé sur une île avec sa fille Miranda, déclenche une tempête pour faire échouer ses ennemis sur son rivage. En anglais.',
-    },
-    {
-      youtubeId: 'aAzvnV4Qz9w', title: 'Missing (théâtre physique)', creator: 'Gecko', year: '2012', duration: '1:05:03',
-      summary: 'Spectacle de théâtre physique de la compagnie britannique Gecko : peu de dialogues, une histoire portée par le mouvement, la lumière et la musique.',
-    },
-    {
-      youtubeId: 'YSvS9y1WjrE', title: 'The Overcoat (théâtre physique)', creator: 'Gecko', year: '', duration: '1:19:38',
-      summary: 'D’après la nouvelle de Gogol : un modeste employé de bureau voit sa vie bouleversée par un nouveau manteau. Théâtre physique, quasiment sans paroles.',
-    },
-    {
-      youtubeId: 'yRr9otK7_Ac', title: 'The Race (théâtre physique)', creator: 'Gecko', year: '', duration: '1:02:27',
-      summary: 'Spectacle de théâtre physique de la compagnie britannique Gecko, porté par le mouvement et la musique plutôt que par le texte.',
-    },
-    {
-      youtubeId: 'kHebeOH129c', title: 'Hibernatus', creator: 'Jean-Bernard Luc · avec Jean-Luc Reichmann, Ingrid Chauvin', year: '2015', duration: '1:31:18', isUnofficial: true,
-      summary: 'Un homme congelé dans les glaces du pôle Nord au début du XXe siècle est ramené à la vie de nos jours. Pour lui éviter un choc fatal, sa famille doit lui faire croire qu’on est toujours en 1905.',
-    },
-    {
-      youtubeId: '5MWoRY9ZAG0', title: 'Le Gai Mariage', creator: 'Avec Laurent Ournac, Olivier Sitruk', year: '', duration: '1:52:01', isUnofficial: true,
-      summary: '',
-    },
-    {
-      youtubeId: 'zAvVRGzpEDA', title: 'Les Belles-Sœurs', creator: 'Éric Assous', year: '', duration: '1:36:33', isUnofficial: true,
-      summary: '',
-    },
-    {
-      youtubeId: 'xyBIJwFiAmQ', title: 'Les Bonobos', creator: 'Laurent Baffie', year: '', duration: '1:49:15', isUnofficial: true,
-      summary: '',
-    },
-    {
-      youtubeId: 'Ltea52zfd0Y', title: 'La Vérité', creator: 'Florian Zeller · avec Pierre Arditi', year: '2011', duration: '1:43:54', isUnofficial: true,
-      summary: 'Michel a une liaison avec Alice, la femme de son meilleur ami Paul. Menteur maladroit, il s’emmêle dans ses mensonges… et découvre qu’il n’est peut-être pas le seul à mentir.',
-    },
-    {
-      youtubeId: 'o9V2Jg-poRs', title: 'Comme s’il en pleuvait', creator: 'Sébastien Thiéry · avec Pierre Arditi, Évelyne Bouix', year: '2014', duration: '1:25:40', isUnofficial: true,
-      summary: 'Un couple découvre chaque jour des billets de banque qui apparaissent mystérieusement dans son appartement. D’où vient cet argent, et qui le dépose ?',
-    },
-    {
-      youtubeId: 'smhwtfWD-EE', title: '13 à table', creator: 'Marc-Gilbert Sauvageon', year: '2020', duration: '1:52:31', isUnofficial: true,
-      summary: 'Le soir du réveillon de Noël, Madeleine, très superstitieuse, s’aperçoit qu’ils vont être treize à table. Il faut à tout prix trouver un quatorzième convive.',
-    },
-    {
-      youtubeId: 'Uf_eZW3Z0Pw', title: 'Ils se sont aimés', creator: 'Pierre Palmade, Muriel Robin · avec Pierre Palmade, Michèle Laroque', year: '2002', duration: '1:28:01', isUnofficial: true,
-      summary: 'Une suite de scènes de la vie d’un couple, de la rencontre aux disputes et à la séparation, jouée par Pierre Palmade et Michèle Laroque.',
-    },
-    {
-      youtubeId: 'g1eJKQSMIbM', title: 'L’Invitation', creator: 'Théâtre de la Madeleine · avec Gad Elmaleh', year: '2020', duration: '1:34:45', isUnofficial: true,
-      summary: '',
-    },
-    {
-      youtubeId: 'aohtKoYbevo', title: 'Espèces menacées', creator: 'Ray Cooney · avec Gérard Jugnot, Martin Lamotte', year: '', duration: '1:40:54', isUnofficial: true,
-      summary: 'Un comptable sans histoire récupère par erreur une mallette remplie de billets et décide de partir à l’étranger le soir même de son anniversaire. Farce de Ray Cooney.',
-    },
-    {
-      youtubeId: 'XiEyd4L1VmA', title: 'C’était quand la dernière fois ?', creator: 'Théâtre Tristan Bernard · avec Virginie Hocq, Zinedine Soualem', year: '2018', duration: '1:35:52', isUnofficial: true,
-      summary: '',
-    },
-    {
-      youtubeId: 'axpmHfdoU5I', title: 'Je préfère qu’on reste amis', creator: 'Laurent Ruquier · avec Michèle Bernier, Frédéric Diefenthal', year: '2016', duration: '1:59:04', isUnofficial: true,
-      summary: 'Claudine est amoureuse depuis longtemps de son meilleur ami Valentin, qui ne la voit que comme une amie. Comédie de Laurent Ruquier.',
-    },
-    {
-      youtubeId: 'DbTbFmXRH9s', title: 'Madame Doubtfire', creator: 'Avec Michel Leeb', year: '', duration: '1:47:43', isUnofficial: true,
-      summary: 'Un père divorcé, privé de ses enfants, se déguise en vieille gouvernante pour pouvoir les voir chaque jour.',
-    },
-    {
-      youtubeId: 'WlAGpyw4eEc', title: 'L’Hôtel du libre échange', creator: 'Feydeau · diffusé sur France 2', year: '2015', duration: '2:27:33', isUnofficial: true,
-      summary: 'Pinglet donne rendez-vous à Marcelle, la femme de son ami Paillardin, dans un hôtel douteux. Le même soir, tout leur entourage s’y retrouve. Vaudeville de Feydeau.',
-    },
-    {
-      youtubeId: 'TNvDKIANsLo', title: 'Le Malade imaginaire', creator: 'Molière · Comédie-Française, mise en scène Claude Stratz', year: '2001', duration: '2:01:17', isUnofficial: true,
-      summary: 'Argan, hypocondriaque, veut marier sa fille Angélique à un médecin pour être soigné à domicile. Mais Angélique aime Cléante, et la servante Toinette va tout faire pour les aider.',
-    },
-    {
-      youtubeId: '1yN2o8nJMOo', title: 'Dom Juan ou le Festin de pierre', creator: 'Molière · Comédie-Française', year: '2002', duration: '2:18:50', isUnofficial: true,
-      summary: 'Dom Juan, séducteur libertin, enchaîne les conquêtes et défie toutes les règles, humaines comme divines, jusqu’à inviter à dîner la statue d’un homme qu’il a tué.',
-    },
-    {
-      youtubeId: 'mlMnz9B-Zho', title: 'Le Misanthrope', creator: 'Molière · Comédie-Française, mise en scène Jean-Pierre Miquel', year: '2000', duration: '2:15:10', isUnofficial: true,
-      summary: 'Alceste déteste l’hypocrisie mondaine et veut dire la vérité à tout le monde. Il est pourtant amoureux de Célimène, jeune veuve coquette qui adore la vie de salon.',
-    },
-    {
-      youtubeId: 'smoT72cbpRo', title: 'Le Mariage de Figaro', creator: 'Beaumarchais', year: '', duration: '2:11:39', isUnofficial: true,
-      summary: 'Le jour de son mariage avec Suzanne, Figaro découvre que son maître, le comte Almaviva, veut séduire sa fiancée. Une folle journée de ruses et de quiproquos.',
-    },
-    {
-      youtubeId: '2qsVJN0C0GE', title: 'L’Avare', creator: 'Molière', year: '', duration: '1:59:40', isUnofficial: true,
-      summary: 'Harpagon, vieillard obsédé par son argent, veut marier ses enfants pour son profit et épouser lui-même la jeune Mariane, aimée de son fils Cléante.',
-    },
-    {
-      youtubeId: 'Kb_voCqu250', title: 'Hamlet', creator: 'Shakespeare', year: '', duration: '2:09:08', isUnofficial: true,
-      summary: 'Le spectre de son père apprend au prince Hamlet qu’il a été assassiné par son frère Claudius, devenu roi et mari de sa mère. Hamlet feint la folie pour préparer sa vengeance.',
-    },
-    {
-      youtubeId: 'jzFrnFP--RA', title: 'Macbeth (EN)', creator: 'Shakespeare · Stratford Festival', year: '2017', duration: '2:17:00', isUnofficial: true,
-      summary: 'Poussé par la prophétie de trois sorcières et par l’ambition de sa femme, le général Macbeth assassine le roi Duncan pour prendre sa place. En anglais.',
-    },
-    {
-      youtubeId: 'QKoIJP8QgiM', title: 'Hamlet (EN)', creator: 'Shakespeare · Stratford Festival', year: '2016', duration: '2:45:32', isUnofficial: true,
-      summary: 'Le spectre de son père apprend au prince Hamlet qu’il a été assassiné par son frère Claudius, devenu roi. Hamlet feint la folie pour préparer sa vengeance. En anglais.',
-    },
-    {
-      youtubeId: 'TcKPpOr7_gU', title: 'Othello (EN)', creator: 'Shakespeare · Stratford Festival', year: '2019', duration: '2:40:24', isUnofficial: true,
-      summary: 'Le général Othello, manipulé par son enseigne Iago, finit par croire que sa femme Desdémone le trompe. En anglais.',
-    },
-    {
-      youtubeId: 'l8JO39fuFfc', title: 'The Tempest (EN)', creator: 'Shakespeare · Stratford Festival', year: '2019', duration: '2:23:41', isUnofficial: true,
-      summary: 'Prospero, duc de Milan détrôné et exilé sur une île avec sa fille Miranda, déclenche une tempête pour faire échouer ses ennemis sur son rivage. En anglais.',
-    },
-    {
-      youtubeId: 'ztAhKXhnxvM', title: 'Much Ado About Nothing (EN)', creator: 'Shakespeare · Stratford Festival', year: '2023', duration: '2:37:24', isUnofficial: true,
-      summary: 'Béatrice et Bénédict passent leur temps à se disputer, pendant que Claudio et Héro s’apprêtent à se marier. Leurs amis vont s’amuser à les rapprocher. En anglais.',
-    },
-    {
-      youtubeId: 'UKcc96ua8XY', title: 'Le Marchand de Venise (en hébreu)', creator: 'Shakespeare · Habima, mise en scène Ilan Ronen, Shakespeare’s Globe', year: '2012', duration: '2:15:14', isUnofficial: true,
-      summary: 'Pour aider son ami Bassanio, le marchand Antonio emprunte de l’argent à l’usurier Shylock, qui exige une livre de sa chair en garantie. Version du théâtre national israélien Habima, jouée au Globe de Londres.',
-    },
-    {
-      youtubeId: '3ZrL6HciBUc', title: 'The Importance of Being Earnest (EN)', creator: 'Oscar Wilde · Roundabout Theatre, Broadway', year: '2011', duration: '2:10:26', isUnofficial: true,
-      summary: 'Deux jeunes dandys s’inventent chacun un double nommé Ernest pour échapper à leurs obligations, jusqu’à ce que leurs mensonges se croisent. En anglais.',
-    },
-  ].map(({ duration, ...curatedPlay }) => ({
-    ...curatedPlay,
-    identifier: `youtube:${curatedPlay.youtubeId}`,
-    badge: 'Vidéo',
-    durationSeconds: parseDurationToSeconds(duration),
-  }));
+  const LIST_MODES = {
+    all: 'all',
+    favorites: 'favorites',
+    watchLater: 'watchLater',
+  };
+
+  const DURATION_FILTERS = {
+    all: () => true,
+    short: (durationSeconds) => durationSeconds > 0 && durationSeconds < 90 * 60,
+    medium: (durationSeconds) => durationSeconds >= 90 * 60 && durationSeconds <= 150 * 60,
+    long: (durationSeconds) => durationSeconds > 150 * 60,
+  };
+
+  const SOURCE_FILTERS = {
+    all: () => true,
+    official: (play) => play.isUnofficial !== true,
+    unofficial: (play) => play.isUnofficial === true,
+  };
+
+  const DEFAULT_CURATED_FILTERS = Object.freeze({ language: 'all', duration: 'all', genre: 'all', source: 'all' });
 
   const EXTERNAL_LINKS = [
     {
@@ -324,6 +107,7 @@
       url: 'https://www.comedie-francaise.fr/',
     },
   ];
+
   // --- utils ---
   function debounce(callback, delayMs) {
     let timeoutId = null;
@@ -342,6 +126,32 @@
     };
 
     return debounced;
+  }
+
+  function throttle(callback, intervalMs) {
+    let lastCallTime = 0;
+    let trailingTimeoutId = null;
+
+    const throttled = (...callArguments) => {
+      const elapsedMs = Date.now() - lastCallTime;
+      clearTimeout(trailingTimeoutId);
+      if (elapsedMs >= intervalMs) {
+        lastCallTime = Date.now();
+        callback(...callArguments);
+        return;
+      }
+      trailingTimeoutId = setTimeout(() => {
+        lastCallTime = Date.now();
+        callback(...callArguments);
+      }, intervalMs - elapsedMs);
+    };
+
+    throttled.cancel = () => {
+      clearTimeout(trailingTimeoutId);
+      trailingTimeoutId = null;
+    };
+
+    return throttled;
   }
 
   const LUCENE_SPECIAL_CHARACTERS = /[+\-!(){}[\]^"~*?:\\/&|]/g;
@@ -391,8 +201,24 @@
       ? `${plainText.slice(0, MAXIMUM_SUMMARY_LENGTH).trimEnd()}…`
       : plainText;
   }
-  // --- archiveApi ---
 
+  function pickRandomItem(items) {
+    return items.length === 0 ? undefined : items[Math.floor(Math.random() * items.length)];
+  }
+
+  function todayIsoDate() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function isPlainObject(candidate) {
+    return typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate);
+  }
+
+  function pluralize(count, singular, plural) {
+    return `${count} ${count === 1 ? singular : plural}`;
+  }
+
+  // --- archiveApi ---
   const ARCHIVE_ORIGIN = 'https://archive.org';
   const RETURNED_FIELDS = ['identifier', 'title', 'creator', 'year', 'mediatype'];
 
@@ -413,8 +239,7 @@
 
   function buildQuery(categoryQuery, searchText) {
     const recentOnlyClause = `year:[${MINIMUM_YEAR} TO 9999]`;
-    const textClause = buildTextClause(searchText);
-    return [`(${categoryQuery})`, recentOnlyClause, textClause]
+    return [`(${categoryQuery})`, recentOnlyClause, ARCHIVE_EXCLUSION_CLAUSE, buildTextClause(searchText)]
       .filter((clause) => clause !== '')
       .join(' AND ');
   }
@@ -424,7 +249,7 @@
       identifier: document.identifier,
       title: firstValue(document.title) ?? document.identifier,
       creator: firstValue(document.creator) ?? '',
-      year: firstValue(document.year) ?? '',
+      year: String(firstValue(document.year) ?? ''),
       badge,
     };
   }
@@ -476,6 +301,331 @@
     };
   }
 
+  // --- playSources ---
+  const YOUTUBE_EMBED_ORIGIN = 'https://www.youtube-nocookie.com';
+  const YOUTUBE_ID_PATTERN = /^[\w-]{11}$/;
+
+  function isYoutubePlay(play) {
+    return typeof play.youtubeId === 'string';
+  }
+
+  function thumbnailUrl(play) {
+    return isYoutubePlay(play)
+      ? `https://i.ytimg.com/vi/${encodeURIComponent(play.youtubeId)}/hqdefault.jpg`
+      : `${ARCHIVE_ORIGIN}/services/img/${encodeURIComponent(play.identifier)}`;
+  }
+
+  function embedUrl(play, startSeconds) {
+    if (!isYoutubePlay(play)) {
+      return `${ARCHIVE_ORIGIN}/embed/${encodeURIComponent(play.identifier)}`;
+    }
+    const playerParameters = new URLSearchParams({
+      enablejsapi: '1',
+      autoplay: '1',
+      start: String(Math.floor(startSeconds)),
+    });
+    return `${YOUTUBE_EMBED_ORIGIN}/embed/${encodeURIComponent(play.youtubeId)}?${playerParameters}`;
+  }
+
+  function detailsUrl(play) {
+    return isYoutubePlay(play)
+      ? `https://www.youtube.com/watch?v=${encodeURIComponent(play.youtubeId)}`
+      : `${ARCHIVE_ORIGIN}/details/${encodeURIComponent(play.identifier)}`;
+  }
+
+  function sourceName(play) {
+    return isYoutubePlay(play) ? 'YouTube' : 'Internet Archive';
+  }
+
+  // Le lecteur YouTube diffuse sa position par postMessage (protocole de l'IFrame API).
+  // On l'écoute directement plutôt que de charger le script officiel, qui exige
+  // de déclarer une fonction globale window.onYouTubeIframeAPIReady.
+  function parsePlayerPosition(messageData) {
+    try {
+      const playerMessage = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
+      const playerInfo = playerMessage?.info;
+      if (playerMessage?.event !== 'infoDelivery' || typeof playerInfo?.currentTime !== 'number') {
+        return null;
+      }
+      const durationSeconds = Number(playerInfo.duration);
+      return durationSeconds > 0 ? { seconds: playerInfo.currentTime, durationSeconds } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // --- curatedPlays ---
+  function toCuratedPlay({ duration, ...rawPlay }) {
+    return {
+      ...rawPlay,
+      identifier: `youtube:${rawPlay.youtubeId}`,
+      badge: 'Vidéo',
+      durationSeconds: parseDurationToSeconds(duration),
+    };
+  }
+
+  const LOCAL_SORTERS = {
+    'date desc': (first, second) => (second.year || '0').localeCompare(first.year || '0'),
+    'date asc': (first, second) => (first.year || '9999').localeCompare(second.year || '9999'),
+    'titleSorter asc': (first, second) => first.title.localeCompare(second.title, 'fr'),
+  };
+
+  function matchesSearchText(play, searchText) {
+    const normalizedSearch = searchText.trim().toLocaleLowerCase('fr');
+    return `${play.title} ${play.creator}`.toLocaleLowerCase('fr').includes(normalizedSearch);
+  }
+
+  function matchesCuratedFilters(play, filters) {
+    return (filters.language === 'all' || play.language === filters.language)
+      && (filters.genre === 'all' || play.genre === filters.genre)
+      && DURATION_FILTERS[filters.duration](play.durationSeconds)
+      && SOURCE_FILTERS[filters.source](play);
+  }
+
+  function sortLocally(plays, sort) {
+    const sorter = LOCAL_SORTERS[sort];
+    return sorter === undefined ? [...plays] : [...plays].sort(sorter);
+  }
+
+  function countUnofficial(plays) {
+    return plays.filter((play) => play.isUnofficial === true).length;
+  }
+
+  // --- personalLibrary ---
+  const STORAGE_KEY = 'rideau.library.v1';
+  const EXPORT_FORMAT = 'rideau-sauvegarde';
+  const EXPORT_VERSION = 1;
+  const LIBRARY_SECTIONS = ['favorites', 'watchLater', 'watched', 'hidden', 'progress'];
+
+  function createEmptyLibrary() {
+    return Object.fromEntries(LIBRARY_SECTIONS.map((section) => [section, {}]));
+  }
+
+  // Les fiches gardées (favoris, à voir plus tard) peuvent venir d'un fichier importé :
+  // on ne conserve que des champs connus et typés avant qu'ils atteignent le DOM ou une URL.
+  function sanitizeSavedPlay(rawPlay) {
+    if (!isPlainObject(rawPlay) || typeof rawPlay.identifier !== 'string' || typeof rawPlay.title !== 'string') {
+      return null;
+    }
+    const savedPlay = {
+      identifier: rawPlay.identifier,
+      title: rawPlay.title,
+      creator: typeof rawPlay.creator === 'string' ? rawPlay.creator : '',
+      year: typeof rawPlay.year === 'string' ? rawPlay.year : '',
+      badge: typeof rawPlay.badge === 'string' ? rawPlay.badge : 'Vidéo',
+      savedAt: Number.isFinite(rawPlay.savedAt) ? rawPlay.savedAt : Date.now(),
+    };
+    if (typeof rawPlay.youtubeId === 'string' && YOUTUBE_ID_PATTERN.test(rawPlay.youtubeId)) {
+      savedPlay.youtubeId = rawPlay.youtubeId;
+    }
+    if (rawPlay.isUnofficial === true) {
+      savedPlay.isUnofficial = true;
+    }
+    if (Number.isFinite(rawPlay.durationSeconds)) {
+      savedPlay.durationSeconds = rawPlay.durationSeconds;
+    }
+    if (typeof rawPlay.summary === 'string') {
+      savedPlay.summary = rawPlay.summary;
+    }
+    return savedPlay;
+  }
+
+  function sanitizeProgress(rawProgress) {
+    if (!isPlainObject(rawProgress)
+      || !Number.isFinite(rawProgress.seconds)
+      || !Number.isFinite(rawProgress.durationSeconds)
+      || rawProgress.durationSeconds <= 0) {
+      return null;
+    }
+    return {
+      seconds: rawProgress.seconds,
+      durationSeconds: rawProgress.durationSeconds,
+      updatedAt: Number.isFinite(rawProgress.updatedAt) ? rawProgress.updatedAt : 0,
+    };
+  }
+
+  function sanitizeTimestampMap(rawMap) {
+    return Object.fromEntries(Object.entries(isPlainObject(rawMap) ? rawMap : {})
+      .filter(([, timestamp]) => Number.isFinite(timestamp)));
+  }
+
+  function sanitizeEntryMap(rawMap, sanitizeEntry) {
+    return Object.fromEntries(Object.entries(isPlainObject(rawMap) ? rawMap : {})
+      .map(([identifier, rawEntry]) => [identifier, sanitizeEntry(rawEntry)])
+      .filter(([, entry]) => entry !== null));
+  }
+
+  function sanitizeLibrary(rawLibrary) {
+    const sourceLibrary = isPlainObject(rawLibrary) ? rawLibrary : {};
+    return {
+      favorites: sanitizeEntryMap(sourceLibrary.favorites, sanitizeSavedPlay),
+      watchLater: sanitizeEntryMap(sourceLibrary.watchLater, sanitizeSavedPlay),
+      watched: sanitizeTimestampMap(sourceLibrary.watched),
+      hidden: sanitizeTimestampMap(sourceLibrary.hidden),
+      progress: sanitizeEntryMap(sourceLibrary.progress, sanitizeProgress),
+    };
+  }
+
+  function readStoredLibrary() {
+    try {
+      const storedJson = localStorage.getItem(STORAGE_KEY);
+      return storedJson === null ? createEmptyLibrary() : sanitizeLibrary(JSON.parse(storedJson));
+    } catch (storageError) {
+      console.warn('Bibliothèque locale illisible, elle repart de zéro.', storageError);
+      return createEmptyLibrary();
+    }
+  }
+
+  class PersonalLibrary {
+    #library = readStoredLibrary();
+
+    isFavorite(identifier) {
+      return Object.hasOwn(this.#library.favorites, identifier);
+    }
+
+    isInWatchLater(identifier) {
+      return Object.hasOwn(this.#library.watchLater, identifier);
+    }
+
+    isWatched(identifier) {
+      return Object.hasOwn(this.#library.watched, identifier);
+    }
+
+    isHidden(identifier) {
+      return Object.hasOwn(this.#library.hidden, identifier);
+    }
+
+    toggleFavorite(play) {
+      return this.#toggleSavedPlay('favorites', play);
+    }
+
+    toggleWatchLater(play) {
+      return this.#toggleSavedPlay('watchLater', play);
+    }
+
+    toggleWatched(identifier) {
+      if (this.isWatched(identifier)) {
+        delete this.#library.watched[identifier];
+      } else {
+        this.#library.watched[identifier] = Date.now();
+      }
+      this.#persist();
+      return this.isWatched(identifier);
+    }
+
+    markWatched(identifier) {
+      if (!this.isWatched(identifier)) {
+        this.#library.watched[identifier] = Date.now();
+        this.#persist();
+      }
+    }
+
+    hide(identifier) {
+      this.#library.hidden[identifier] = Date.now();
+      this.#persist();
+    }
+
+    unhideAll() {
+      this.#library.hidden = {};
+      this.#persist();
+    }
+
+    getProgress(identifier) {
+      return this.#library.progress[identifier] ?? null;
+    }
+
+    saveProgress(identifier, { seconds, durationSeconds }) {
+      this.#library.progress[identifier] = { seconds, durationSeconds, updatedAt: Date.now() };
+      this.#persist();
+    }
+
+    clearProgress(identifier) {
+      if (Object.hasOwn(this.#library.progress, identifier)) {
+        delete this.#library.progress[identifier];
+        this.#persist();
+      }
+    }
+
+    listFavorites() {
+      return this.#listSavedPlays('favorites');
+    }
+
+    listWatchLater() {
+      return this.#listSavedPlays('watchLater');
+    }
+
+    countEntries() {
+      return Object.fromEntries(LIBRARY_SECTIONS.map((section) => [section, Object.keys(this.#library[section]).length]));
+    }
+
+    exportSnapshot() {
+      return {
+        format: EXPORT_FORMAT,
+        version: EXPORT_VERSION,
+        exportedAt: new Date().toISOString(),
+        library: structuredClone(this.#library),
+      };
+    }
+
+    // Fusion plutôt que remplacement : importer la sauvegarde du téléphone sur
+    // l'ordinateur ne doit pas effacer ce qui n'existe que sur l'ordinateur.
+    importSnapshot(snapshot) {
+      if (!isPlainObject(snapshot) || snapshot.format !== EXPORT_FORMAT) {
+        throw new Error('Format de sauvegarde inconnu');
+      }
+      const importedLibrary = sanitizeLibrary(snapshot.library);
+      ['favorites', 'watchLater', 'watched', 'hidden'].forEach((section) => {
+        this.#library[section] = { ...importedLibrary[section], ...this.#library[section] };
+      });
+      Object.entries(importedLibrary.progress).forEach(([identifier, importedProgress]) => {
+        const currentProgress = this.#library.progress[identifier];
+        if (currentProgress === undefined || importedProgress.updatedAt > currentProgress.updatedAt) {
+          this.#library.progress[identifier] = importedProgress;
+        }
+      });
+      this.#persist();
+      return Object.fromEntries(LIBRARY_SECTIONS.map((section) => [section, Object.keys(importedLibrary[section]).length]));
+    }
+
+    #toggleSavedPlay(section, play) {
+      if (Object.hasOwn(this.#library[section], play.identifier)) {
+        delete this.#library[section][play.identifier];
+      } else {
+        const savedPlay = sanitizeSavedPlay({ ...play, savedAt: Date.now() });
+        if (savedPlay !== null) {
+          this.#library[section][play.identifier] = savedPlay;
+        }
+      }
+      this.#persist();
+      return Object.hasOwn(this.#library[section], play.identifier);
+    }
+
+    #listSavedPlays(section) {
+      return Object.values(this.#library[section]).sort((first, second) => second.savedAt - first.savedAt);
+    }
+
+    #persist() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.#library));
+      } catch (storageError) {
+        console.warn('Impossible d’enregistrer la bibliothèque locale.', storageError);
+      }
+    }
+  }
+
+  // --- videoAvailability ---
+  class VideoAvailability {
+    #unavailableIdentifiers = new Set();
+
+    markUnavailable(identifier) {
+      this.#unavailableIdentifiers.add(identifier);
+    }
+
+    isUnavailable(identifier) {
+      return this.#unavailableIdentifiers.has(identifier);
+    }
+  }
+
   // --- playDetailsLoader ---
   const MAXIMUM_PARALLEL_DETAIL_REQUESTS = 4;
 
@@ -489,7 +639,7 @@
 
     load(play, { isUrgent = false } = {}) {
       if (isYoutubePlay(play)) {
-        return Promise.resolve({ durationSeconds: play.durationSeconds, summary: play.summary });
+        return Promise.resolve({ durationSeconds: play.durationSeconds ?? 0, summary: play.summary ?? '' });
       }
 
       const cachedDetails = this.#detailsByIdentifier.get(play.identifier);
@@ -554,134 +704,32 @@
     }
   }
 
-  // --- playSources ---
-  function isYoutubePlay(play) {
-    return typeof play.youtubeId === 'string';
-  }
-
-  function thumbnailUrl(play) {
-    return isYoutubePlay(play)
-      ? `https://i.ytimg.com/vi/${encodeURIComponent(play.youtubeId)}/hqdefault.jpg`
-      : `${ARCHIVE_ORIGIN}/services/img/${encodeURIComponent(play.identifier)}`;
-  }
-
-  function embedUrl(play) {
-    return isYoutubePlay(play)
-      ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(play.youtubeId)}`
-      : `${ARCHIVE_ORIGIN}/embed/${encodeURIComponent(play.identifier)}`;
-  }
-
-  function detailsUrl(play) {
-    return isYoutubePlay(play)
-      ? `https://www.youtube.com/watch?v=${encodeURIComponent(play.youtubeId)}`
-      : `${ARCHIVE_ORIGIN}/details/${encodeURIComponent(play.identifier)}`;
-  }
-
-  function sourceName(play) {
-    return isYoutubePlay(play) ? 'YouTube' : 'Internet Archive';
-  }
-
-  // --- curatedPlays ---
-  const LOCAL_SORTERS = {
-    'date desc': (first, second) => (second.year || '0').localeCompare(first.year || '0'),
-    'date asc': (first, second) => (first.year || '9999').localeCompare(second.year || '9999'),
-    'titleSorter asc': (first, second) => first.title.localeCompare(second.title, 'fr'),
-  };
-
-  function matchesSearchText(play, searchText) {
-    const normalizedSearch = searchText.trim().toLocaleLowerCase('fr');
-    return `${play.title} ${play.creator}`.toLocaleLowerCase('fr').includes(normalizedSearch);
-  }
-
-  function countUnofficial(plays) {
-    return plays.filter((play) => play.isUnofficial === true).length;
-  }
-
-  function filterAndSortLocally(plays, { searchText, sort }) {
-    const matchingPlays = plays.filter((play) => matchesSearchText(play, searchText));
-    const sorter = LOCAL_SORTERS[sort];
-    return sorter === undefined ? matchingPlays : matchingPlays.sort(sorter);
-  }
-  // --- personalLibrary ---
-  const STORAGE_KEY = 'rideau.library.v1';
-
-  function readStoredLibrary() {
-    try {
-      const storedJson = localStorage.getItem(STORAGE_KEY);
-      const parsedLibrary = storedJson === null ? {} : JSON.parse(storedJson);
-      return {
-        favorites: parsedLibrary.favorites ?? {},
-        watched: parsedLibrary.watched ?? {},
-      };
-    } catch (storageError) {
-      console.warn('Bibliothèque locale illisible, elle repart de zéro.', storageError);
-      return { favorites: {}, watched: {} };
-    }
-  }
-
-  // Les favoris gardent une copie des métadonnées pour s'afficher sans requête réseau.
-  class PersonalLibrary {
-    #library = readStoredLibrary();
-
-    isFavorite(identifier) {
-      return Object.hasOwn(this.#library.favorites, identifier);
-    }
-
-    isWatched(identifier) {
-      return Object.hasOwn(this.#library.watched, identifier);
-    }
-
-    toggleFavorite(play) {
-      if (this.isFavorite(play.identifier)) {
-        delete this.#library.favorites[play.identifier];
-      } else {
-        this.#library.favorites[play.identifier] = { ...play, savedAt: Date.now() };
-      }
-      this.#persist();
-      return this.isFavorite(play.identifier);
-    }
-
-    toggleWatched(identifier) {
-      if (this.isWatched(identifier)) {
-        delete this.#library.watched[identifier];
-      } else {
-        this.#library.watched[identifier] = Date.now();
-      }
-      this.#persist();
-      return this.isWatched(identifier);
-    }
-
-    listFavorites() {
-      return Object.values(this.#library.favorites).sort((first, second) => second.savedAt - first.savedAt);
-    }
-
-    #persist() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.#library));
-      } catch (storageError) {
-        console.warn('Impossible d’enregistrer la bibliothèque locale.', storageError);
-      }
-    }
-  }
   // --- resultsView ---
-
   class ResultsView {
     #gridElement;
     #cardTemplate;
     #library;
     #detailsLoader;
+    #availability;
     #onOpenPlay;
+    #onPlayHidden;
     #playsByIdentifier = new Map();
     #cardsByIdentifier = new Map();
     #handleGridClick = (clickEvent) => this.#onGridClick(clickEvent);
+    #handleThumbnailSettled = (settledEvent) => this.#onThumbnailSettled(settledEvent);
 
-    constructor({ gridElement, cardTemplate, library, detailsLoader, onOpenPlay }) {
+    constructor({ gridElement, cardTemplate, library, detailsLoader, availability, onOpenPlay, onPlayHidden }) {
       this.#gridElement = gridElement;
       this.#cardTemplate = cardTemplate;
       this.#library = library;
       this.#detailsLoader = detailsLoader;
+      this.#availability = availability;
       this.#onOpenPlay = onOpenPlay;
+      this.#onPlayHidden = onPlayHidden;
       this.#gridElement.addEventListener('click', this.#handleGridClick);
+      // load/error ne remontent pas : la phase de capture permet un seul écouteur pour toutes les vignettes.
+      this.#gridElement.addEventListener('load', this.#handleThumbnailSettled, true);
+      this.#gridElement.addEventListener('error', this.#handleThumbnailSettled, true);
     }
 
     replace(plays) {
@@ -694,6 +742,10 @@
       this.#gridElement.append(this.#buildCards(plays));
     }
 
+    listDisplayedPlays() {
+      return [...this.#playsByIdentifier.values()];
+    }
+
     refreshCard(identifier) {
       const cardElement = this.#cardsByIdentifier.get(identifier);
       if (cardElement !== undefined) {
@@ -701,8 +753,16 @@
       }
     }
 
+    removeCard(identifier) {
+      this.#cardsByIdentifier.get(identifier)?.remove();
+      this.#cardsByIdentifier.delete(identifier);
+      this.#playsByIdentifier.delete(identifier);
+    }
+
     destroy() {
       this.#gridElement.removeEventListener('click', this.#handleGridClick);
+      this.#gridElement.removeEventListener('load', this.#handleThumbnailSettled, true);
+      this.#gridElement.removeEventListener('error', this.#handleThumbnailSettled, true);
       this.#playsByIdentifier.clear();
       this.#cardsByIdentifier.clear();
     }
@@ -716,21 +776,6 @@
       });
       newPlays.forEach((play) => this.#showDurationWhenLoaded(play));
       return fragment;
-    }
-
-    async #showDurationWhenLoaded(play) {
-      try {
-        const { durationSeconds } = await this.#detailsLoader.load(play);
-        const durationBadge = this.#cardsByIdentifier.get(play.identifier)?.querySelector('.card-duration');
-        if (durationBadge !== undefined && durationBadge !== null && durationSeconds > 0) {
-          durationBadge.textContent = formatDuration(durationSeconds);
-          durationBadge.hidden = false;
-        }
-      } catch (detailsError) {
-        if (!isAbortError(detailsError)) {
-          console.warn(`Durée indisponible pour ${play.identifier}`, detailsError);
-        }
-      }
     }
 
     #buildCard(play) {
@@ -748,8 +793,24 @@
       cardElement.querySelector('.card-open').setAttribute('aria-label', `Voir le résumé de « ${play.title} »`);
 
       this.#applyPersonalState(cardElement, play.identifier);
+      this.#applyAvailability(cardElement, play.identifier);
       this.#cardsByIdentifier.set(play.identifier, cardElement);
       return cardElement;
+    }
+
+    async #showDurationWhenLoaded(play) {
+      try {
+        const { durationSeconds } = await this.#detailsLoader.load(play);
+        const durationBadge = this.#cardsByIdentifier.get(play.identifier)?.querySelector('.card-duration');
+        if (durationBadge !== undefined && durationBadge !== null && durationSeconds > 0) {
+          durationBadge.textContent = formatDuration(durationSeconds);
+          durationBadge.hidden = false;
+        }
+      } catch (detailsError) {
+        if (!isAbortError(detailsError)) {
+          console.warn(`Durée indisponible pour ${play.identifier}`, detailsError);
+        }
+      }
     }
 
     #applyPersonalState(cardElement, identifier) {
@@ -758,34 +819,80 @@
       favoriteButton.textContent = isFavorite ? '★' : '☆';
       favoriteButton.setAttribute('aria-pressed', String(isFavorite));
       favoriteButton.setAttribute('aria-label', isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris');
+      favoriteButton.title = favoriteButton.getAttribute('aria-label');
+
+      const isInWatchLater = this.#library.isInWatchLater(identifier);
+      const watchLaterButton = cardElement.querySelector('.card-watch-later');
+      watchLaterButton.setAttribute('aria-pressed', String(isInWatchLater));
+      watchLaterButton.setAttribute('aria-label', isInWatchLater ? 'Retirer de « À voir plus tard »' : 'Ajouter à « À voir plus tard »');
+      watchLaterButton.title = watchLaterButton.getAttribute('aria-label');
 
       cardElement.querySelector('.card-watched-badge').hidden = !this.#library.isWatched(identifier);
+
+      const progress = this.#library.getProgress(identifier);
+      const progressElement = cardElement.querySelector('.card-progress');
+      progressElement.hidden = progress === null;
+      if (progress !== null) {
+        const progressPercent = Math.min(100, Math.round((progress.seconds / progress.durationSeconds) * 100));
+        progressElement.querySelector('.card-progress-bar').style.width = `${progressPercent}%`;
+      }
+    }
+
+    #applyAvailability(cardElement, identifier) {
+      const isUnavailable = this.#availability.isUnavailable(identifier);
+      cardElement.classList.toggle('is-unavailable', isUnavailable);
+      cardElement.querySelector('.card-unavailable').hidden = !isUnavailable;
+    }
+
+    #onThumbnailSettled(settledEvent) {
+      const thumbnail = settledEvent.target;
+      if (!(thumbnail instanceof HTMLImageElement) || !thumbnail.classList.contains('card-thumbnail')) {
+        return;
+      }
+      const cardElement = thumbnail.closest('.card');
+      const play = this.#playsByIdentifier.get(cardElement?.dataset.identifier);
+      if (play === undefined || !isYoutubePlay(play)) {
+        return;
+      }
+      const isRemovedVideo = settledEvent.type === 'error' || thumbnail.naturalWidth === REMOVED_VIDEO_THUMBNAIL_WIDTH;
+      if (isRemovedVideo) {
+        this.#availability.markUnavailable(play.identifier);
+        this.#applyAvailability(cardElement, play.identifier);
+      }
     }
 
     #onGridClick(clickEvent) {
-      const cardElement = clickEvent.target.closest('.card');
-      if (cardElement === null) {
-        return;
-      }
-
-      const play = this.#playsByIdentifier.get(cardElement.dataset.identifier);
+      const actionElement = clickEvent.target.closest('[data-action]');
+      const cardElement = actionElement?.closest('.card');
+      const play = this.#playsByIdentifier.get(cardElement?.dataset.identifier);
       if (play === undefined) {
         return;
       }
 
-      if (clickEvent.target.closest('.card-favorite') !== null) {
-        this.#library.toggleFavorite(play);
-        this.#applyPersonalState(cardElement, play.identifier);
-        return;
-      }
-
-      if (clickEvent.target.closest('.card-open') !== null) {
-        this.#onOpenPlay(play);
+      switch (actionElement.dataset.action) {
+        case 'open':
+          this.#onOpenPlay(play);
+          break;
+        case 'favorite':
+          this.#library.toggleFavorite(play);
+          this.#applyPersonalState(cardElement, play.identifier);
+          break;
+        case 'watch-later':
+          this.#library.toggleWatchLater(play);
+          this.#applyPersonalState(cardElement, play.identifier);
+          break;
+        case 'hide':
+          this.#library.hide(play.identifier);
+          this.removeCard(play.identifier);
+          this.#onPlayHidden(play);
+          break;
+        default:
+          break;
       }
     }
   }
-  // --- playerDialog ---
 
+  // --- playerDialog ---
   class PlayerDialog {
     #dialogElement;
     #titleElement;
@@ -793,18 +900,41 @@
     #summaryElement;
     #frameWrapper;
     #sourceLink;
+    #watchLaterButton;
     #watchedButton;
     #closeButton;
     #library;
     #detailsLoader;
+    #availability;
     #onPersonalStateChange;
     #currentPlay = null;
+    #playerFrame = null;
+    #lastPosition = null;
 
+    #throttledProgressSave = throttle(() => this.#saveProgress(), PROGRESS_SAVE_INTERVAL_MS);
     #handleCloseClick = () => this.#dialogElement.close();
+    #handleWatchLaterClick = () => this.#toggleWatchLater();
     #handleWatchedClick = () => this.#toggleWatched();
     #handleLaunchClick = (clickEvent) => {
-      if (clickEvent.target.closest('.player-launch') !== null) {
-        this.#launchPlayer();
+      const launchButton = clickEvent.target.closest('[data-start-seconds]');
+      if (launchButton !== null) {
+        this.#launchPlayer(Number(launchButton.dataset.startSeconds));
+      }
+    };
+    #handleFrameLoad = () => {
+      this.#playerFrame?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+        YOUTUBE_EMBED_ORIGIN,
+      );
+    };
+    #handlePlayerMessage = (messageEvent) => {
+      if (messageEvent.origin !== YOUTUBE_EMBED_ORIGIN || messageEvent.source !== this.#playerFrame?.contentWindow) {
+        return;
+      }
+      const position = parsePlayerPosition(messageEvent.data);
+      if (position !== null) {
+        this.#lastPosition = position;
+        this.#throttledProgressSave();
       }
     };
     #handleDialogClose = () => this.#unloadPlayer();
@@ -814,20 +944,23 @@
       }
     };
 
-    constructor({ dialogElement, library, detailsLoader, onPersonalStateChange }) {
+    constructor({ dialogElement, library, detailsLoader, availability, onPersonalStateChange }) {
       this.#dialogElement = dialogElement;
       this.#titleElement = dialogElement.querySelector('#player-title');
       this.#metaElement = dialogElement.querySelector('#player-meta');
       this.#summaryElement = dialogElement.querySelector('#player-summary');
       this.#frameWrapper = dialogElement.querySelector('#player-frame-wrapper');
       this.#sourceLink = dialogElement.querySelector('#player-source-link');
+      this.#watchLaterButton = dialogElement.querySelector('#player-watch-later');
       this.#watchedButton = dialogElement.querySelector('#player-watched');
       this.#closeButton = dialogElement.querySelector('#player-close');
       this.#library = library;
       this.#detailsLoader = detailsLoader;
+      this.#availability = availability;
       this.#onPersonalStateChange = onPersonalStateChange;
 
       this.#closeButton.addEventListener('click', this.#handleCloseClick);
+      this.#watchLaterButton.addEventListener('click', this.#handleWatchLaterClick);
       this.#watchedButton.addEventListener('click', this.#handleWatchedClick);
       this.#frameWrapper.addEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.addEventListener('close', this.#handleDialogClose);
@@ -835,21 +968,25 @@
     }
 
     open(play) {
+      this.#unloadPlayer();
       this.#currentPlay = play;
       this.#titleElement.textContent = play.title;
       this.#sourceLink.href = detailsUrl(play);
       this.#sourceLink.textContent = `Voir sur ${sourceName(play)} ↗`;
-      this.#renderWatchedButton();
+      this.#renderPersonalButtons();
       this.#renderMeta(play, 0);
       this.#summaryElement.textContent = 'Chargement du résumé…';
       this.#frameWrapper.replaceChildren(this.#buildPoster(play));
 
-      this.#dialogElement.showModal();
+      if (!this.#dialogElement.open) {
+        this.#dialogElement.showModal();
+      }
       this.#showDetails(play);
     }
 
     destroy() {
       this.#closeButton.removeEventListener('click', this.#handleCloseClick);
+      this.#watchLaterButton.removeEventListener('click', this.#handleWatchLaterClick);
       this.#watchedButton.removeEventListener('click', this.#handleWatchedClick);
       this.#frameWrapper.removeEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.removeEventListener('close', this.#handleDialogClose);
@@ -864,9 +1001,7 @@
           return;
         }
         this.#renderMeta(play, durationSeconds);
-        this.#summaryElement.textContent = summary === ''
-          ? 'Pas de résumé pour cette captation.'
-          : summary;
+        this.#summaryElement.textContent = summary === '' ? 'Pas de résumé pour cette captation.' : summary;
       } catch (detailsError) {
         if (this.#currentPlay === play) {
           this.#summaryElement.textContent = 'Résumé indisponible pour le moment.';
@@ -885,41 +1020,105 @@
     }
 
     #buildPoster(play) {
-      const launchButton = document.createElement('button');
-      launchButton.type = 'button';
-      launchButton.className = 'player-launch';
+      const posterWrapper = document.createElement('div');
+      posterWrapper.className = 'player-poster-wrapper';
 
       const posterImage = document.createElement('img');
       posterImage.className = 'player-poster';
       posterImage.src = thumbnailUrl(play);
       posterImage.alt = '';
 
-      const launchLabel = document.createElement('span');
-      launchLabel.className = 'player-launch-label';
-      launchLabel.textContent = '▶ Lancer la pièce';
+      const launchActions = document.createElement('div');
+      launchActions.className = 'player-launch-actions';
 
-      launchButton.append(posterImage, launchLabel);
+      if (this.#availability.isUnavailable(play.identifier)) {
+        const unavailableNotice = document.createElement('p');
+        unavailableNotice.className = 'player-unavailable';
+        unavailableNotice.textContent = 'Cette vidéo a été retirée de YouTube.';
+        launchActions.append(unavailableNotice);
+      } else {
+        launchActions.append(...this.#buildLaunchButtons(play));
+      }
+
+      posterWrapper.append(posterImage, launchActions);
+      return posterWrapper;
+    }
+
+    #buildLaunchButtons(play) {
+      const progress = isYoutubePlay(play) ? this.#library.getProgress(play.identifier) : null;
+      if (progress === null || progress.seconds < MINIMUM_RESUME_SECONDS) {
+        return [this.#buildLaunchButton('▶ Lancer la pièce', 0, 'player-launch')];
+      }
+      return [
+        this.#buildLaunchButton(`▶ Reprendre à ${formatDuration(progress.seconds)}`, progress.seconds, 'player-launch'),
+        this.#buildLaunchButton('Recommencer au début', 0, 'player-launch player-launch-secondary'),
+      ];
+    }
+
+    #buildLaunchButton(label, startSeconds, className) {
+      const launchButton = document.createElement('button');
+      launchButton.type = 'button';
+      launchButton.className = className;
+      launchButton.dataset.startSeconds = String(Math.floor(startSeconds));
+      launchButton.textContent = label;
       return launchButton;
     }
 
-    #launchPlayer() {
+    #launchPlayer(startSeconds) {
       if (this.#currentPlay === null) {
         return;
       }
       const playerFrame = document.createElement('iframe');
-      playerFrame.src = embedUrl(this.#currentPlay);
+      playerFrame.src = embedUrl(this.#currentPlay, startSeconds);
       playerFrame.title = `Lecteur : ${this.#currentPlay.title}`;
       playerFrame.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture';
       // YouTube refuse de lire une vidéo intégrée sans en-tête Referer (erreur 153).
       playerFrame.referrerPolicy = 'strict-origin-when-cross-origin';
       playerFrame.className = 'player-frame';
+
+      if (isYoutubePlay(this.#currentPlay)) {
+        this.#playerFrame = playerFrame;
+        playerFrame.addEventListener('load', this.#handleFrameLoad);
+        window.addEventListener('message', this.#handlePlayerMessage);
+      }
       this.#frameWrapper.replaceChildren(playerFrame);
+    }
+
+    #saveProgress() {
+      if (this.#currentPlay === null || this.#lastPosition === null) {
+        return;
+      }
+      const { identifier } = this.#currentPlay;
+      const { seconds, durationSeconds } = this.#lastPosition;
+      if (seconds / durationSeconds >= WATCHED_COMPLETION_RATIO) {
+        this.#library.markWatched(identifier);
+        this.#library.clearProgress(identifier);
+        this.#renderPersonalButtons();
+      } else if (seconds >= MINIMUM_RESUME_SECONDS) {
+        this.#library.saveProgress(identifier, this.#lastPosition);
+      }
+      this.#onPersonalStateChange(identifier);
     }
 
     // Retirer l'iframe coupe la lecture : sinon le son continuerait après fermeture.
     #unloadPlayer() {
+      this.#throttledProgressSave.cancel();
+      this.#saveProgress();
+      window.removeEventListener('message', this.#handlePlayerMessage);
+      this.#playerFrame?.removeEventListener('load', this.#handleFrameLoad);
+      this.#playerFrame = null;
+      this.#lastPosition = null;
       this.#frameWrapper.replaceChildren();
       this.#currentPlay = null;
+    }
+
+    #toggleWatchLater() {
+      if (this.#currentPlay === null) {
+        return;
+      }
+      this.#library.toggleWatchLater(this.#currentPlay);
+      this.#renderPersonalButtons();
+      this.#onPersonalStateChange(this.#currentPlay.identifier);
     }
 
     #toggleWatched() {
@@ -927,25 +1126,33 @@
         return;
       }
       this.#library.toggleWatched(this.#currentPlay.identifier);
-      this.#renderWatchedButton();
+      this.#renderPersonalButtons();
       this.#onPersonalStateChange(this.#currentPlay.identifier);
     }
 
-    #renderWatchedButton() {
-      const isWatched = this.#library.isWatched(this.#currentPlay.identifier);
+    #renderPersonalButtons() {
+      const { identifier } = this.#currentPlay;
+      const isWatched = this.#library.isWatched(identifier);
       this.#watchedButton.textContent = isWatched ? '✓ Vu' : 'Marquer comme vu';
       this.#watchedButton.setAttribute('aria-pressed', String(isWatched));
+
+      const isInWatchLater = this.#library.isInWatchLater(identifier);
+      this.#watchLaterButton.textContent = isInWatchLater ? '✓ À voir plus tard' : '+ À voir plus tard';
+      this.#watchLaterButton.setAttribute('aria-pressed', String(isInWatchLater));
     }
   }
-  // --- main ---
 
+  // --- main ---
   class RideauApp {
     #elements;
     #library = new PersonalLibrary();
+    #availability = new VideoAvailability();
     #detailsLoader = new PlayDetailsLoader();
     #resultsView;
     #playerDialog;
+    #curatedPlays = null;
     #searchAbortController = null;
+    #revokeTimeoutId = null;
     #state = {
       category: CATEGORIES[0],
       searchText: '',
@@ -953,7 +1160,10 @@
       page: 1,
       loadedCount: 0,
       totalCount: 0,
-      favoritesOnly: false,
+      maskedCount: 0,
+      listMode: LIST_MODES.all,
+      hideWatched: false,
+      curatedFilters: { ...DEFAULT_CURATED_FILTERS },
     };
 
     #debouncedSearch = debounce(() => this.#startNewSearch(), SEARCH_DEBOUNCE_MS);
@@ -965,12 +1175,29 @@
       this.#state.sort = changeEvent.target.value;
       this.#startNewSearch();
     };
-    #handleFavoritesToggle = (changeEvent) => {
-      this.#state.favoritesOnly = changeEvent.target.checked;
+    #handleListModeChange = (changeEvent) => {
+      this.#state.listMode = changeEvent.target.value;
       this.#startNewSearch();
+    };
+    #handleHideWatchedChange = (changeEvent) => {
+      this.#state.hideWatched = changeEvent.target.checked;
+      this.#startNewSearch();
+    };
+    #handleCuratedFilterChange = (changeEvent) => {
+      const filterName = changeEvent.target.dataset.filter;
+      if (Object.hasOwn(DEFAULT_CURATED_FILTERS, filterName)) {
+        this.#state.curatedFilters[filterName] = changeEvent.target.value;
+        this.#startNewSearch();
+      }
     };
     #handleTabClick = (clickEvent) => this.#selectCategory(clickEvent);
     #handleLoadMoreClick = () => this.#loadNextPage();
+    #handleSurpriseClick = () => this.#openRandomPlay();
+    #handleExportClick = () => this.#exportLibrary();
+    #handleImportChange = (changeEvent) => this.#importLibrary(changeEvent);
+    #handleUnhideClick = () => this.#unhideAll();
+    #handleCuratedPlaysReceived = (dataEvent) => this.#receiveCuratedPlays(dataEvent.detail);
+    #handleDocumentReady = () => this.#checkCuratedPlaysLoaded();
 
     constructor(elements) {
       this.#elements = elements;
@@ -979,25 +1206,39 @@
         cardTemplate: elements.cardTemplate,
         library: this.#library,
         detailsLoader: this.#detailsLoader,
+        availability: this.#availability,
         onOpenPlay: (play) => this.#playerDialog.open(play),
+        onPlayHidden: () => this.#onPlayHidden(),
       });
       this.#playerDialog = new PlayerDialog({
         dialogElement: elements.playerDialog,
         library: this.#library,
         detailsLoader: this.#detailsLoader,
-        onPersonalStateChange: (identifier) => this.#resultsView.refreshCard(identifier),
+        availability: this.#availability,
+        onPersonalStateChange: (identifier) => this.#onPersonalStateChange(identifier),
       });
     }
 
     start() {
+      // js/plays-data.js est chargé juste après ce script et annonce ses données par cet événement.
+      document.addEventListener(CURATED_PLAYS_EVENT, this.#handleCuratedPlaysReceived);
+      document.addEventListener('DOMContentLoaded', this.#handleDocumentReady);
+
       this.#renderCategoryTabs();
       this.#renderExternalLinks();
+      this.#renderDataControls();
 
       this.#elements.searchInput.addEventListener('input', this.#handleSearchInput);
       this.#elements.sortSelect.addEventListener('change', this.#handleSortChange);
-      this.#elements.favoritesCheckbox.addEventListener('change', this.#handleFavoritesToggle);
+      this.#elements.listModeSelect.addEventListener('change', this.#handleListModeChange);
+      this.#elements.hideWatchedCheckbox.addEventListener('change', this.#handleHideWatchedChange);
+      this.#elements.curatedFilters.addEventListener('change', this.#handleCuratedFilterChange);
       this.#elements.categoryTabs.addEventListener('click', this.#handleTabClick);
       this.#elements.loadMoreButton.addEventListener('click', this.#handleLoadMoreClick);
+      this.#elements.surpriseButton.addEventListener('click', this.#handleSurpriseClick);
+      this.#elements.exportButton.addEventListener('click', this.#handleExportClick);
+      this.#elements.importInput.addEventListener('change', this.#handleImportChange);
+      this.#elements.unhideButton.addEventListener('click', this.#handleUnhideClick);
 
       this.#startNewSearch();
     }
@@ -1005,14 +1246,44 @@
     destroy() {
       this.#debouncedSearch.cancel();
       this.#searchAbortController?.abort();
+      clearTimeout(this.#revokeTimeoutId);
+      document.removeEventListener(CURATED_PLAYS_EVENT, this.#handleCuratedPlaysReceived);
+      document.removeEventListener('DOMContentLoaded', this.#handleDocumentReady);
       this.#elements.searchInput.removeEventListener('input', this.#handleSearchInput);
       this.#elements.sortSelect.removeEventListener('change', this.#handleSortChange);
-      this.#elements.favoritesCheckbox.removeEventListener('change', this.#handleFavoritesToggle);
+      this.#elements.listModeSelect.removeEventListener('change', this.#handleListModeChange);
+      this.#elements.hideWatchedCheckbox.removeEventListener('change', this.#handleHideWatchedChange);
+      this.#elements.curatedFilters.removeEventListener('change', this.#handleCuratedFilterChange);
       this.#elements.categoryTabs.removeEventListener('click', this.#handleTabClick);
       this.#elements.loadMoreButton.removeEventListener('click', this.#handleLoadMoreClick);
+      this.#elements.surpriseButton.removeEventListener('click', this.#handleSurpriseClick);
+      this.#elements.exportButton.removeEventListener('click', this.#handleExportClick);
+      this.#elements.importInput.removeEventListener('change', this.#handleImportChange);
+      this.#elements.unhideButton.removeEventListener('click', this.#handleUnhideClick);
       this.#resultsView.destroy();
       this.#playerDialog.destroy();
       this.#detailsLoader.destroy();
+    }
+
+    #receiveCuratedPlays(rawPlays) {
+      this.#curatedPlays = Array.isArray(rawPlays) ? rawPlays.map(toCuratedPlay) : [];
+      if (this.#isShowingCuratedPlays()) {
+        this.#startNewSearch();
+      }
+    }
+
+    #checkCuratedPlaysLoaded() {
+      if (this.#curatedPlays !== null) {
+        return;
+      }
+      this.#curatedPlays = [];
+      if (this.#isShowingCuratedPlays()) {
+        this.#setStatus('La liste des pièces (js/plays-data.js) n’a pas pu être chargée. Les autres onglets fonctionnent.');
+      }
+    }
+
+    #isShowingCuratedPlays() {
+      return this.#state.listMode === LIST_MODES.all && this.#state.category.isCurated === true;
     }
 
     #renderCategoryTabs() {
@@ -1027,15 +1298,17 @@
         fragment.append(tabButton);
       });
       this.#elements.categoryTabs.replaceChildren(fragment);
-      this.#highlightActiveTab();
+      this.#renderControlsState();
     }
 
-    #highlightActiveTab() {
+    #renderControlsState() {
+      const isPersonalList = this.#state.listMode !== LIST_MODES.all;
       this.#elements.categoryTabs.querySelectorAll('.tab').forEach((tabButton) => {
         const isActive = tabButton.dataset.categoryId === this.#state.category.id;
         tabButton.setAttribute('aria-selected', String(isActive));
-        tabButton.disabled = this.#state.favoritesOnly;
+        tabButton.disabled = isPersonalList;
       });
+      this.#elements.curatedFilters.hidden = !this.#isShowingCuratedPlays();
     }
 
     #renderExternalLinks() {
@@ -1055,6 +1328,12 @@
       this.#elements.externalLinksList.replaceChildren(fragment);
     }
 
+    #renderDataControls() {
+      const hiddenCount = this.#library.countEntries().hidden;
+      this.#elements.unhideButton.disabled = hiddenCount === 0;
+      this.#elements.unhideButton.textContent = `Réafficher les résultats masqués (${hiddenCount})`;
+    }
+
     #selectCategory(clickEvent) {
       const tabButton = clickEvent.target.closest('.tab');
       if (tabButton === null) {
@@ -1071,16 +1350,17 @@
     #startNewSearch() {
       this.#debouncedSearch.cancel();
       this.#detailsLoader.cancelPending();
-      this.#highlightActiveTab();
+      this.#renderControlsState();
       this.#state.page = 1;
       this.#state.loadedCount = 0;
+      this.#state.maskedCount = 0;
 
-      if (this.#state.favoritesOnly) {
+      if (this.#state.listMode !== LIST_MODES.all) {
         this.#searchAbortController?.abort();
-        this.#showFavorites();
+        this.#showPersonalList();
         return;
       }
-      if (this.#state.category.isCurated) {
+      if (this.#state.category.isCurated === true) {
         this.#searchAbortController?.abort();
         this.#showCuratedPlays();
         return;
@@ -1093,24 +1373,54 @@
       this.#fetchPage({ isFirstPage: false });
     }
 
-    #showCuratedPlays() {
-      const matchingPlays = filterAndSortLocally([...CURATED_PLAYS], this.#state);
-      this.#resultsView.replace(matchingPlays);
-      this.#elements.loadMoreButton.hidden = true;
-      this.#setStatus(matchingPlays.length === 0
-        ? 'Aucune pièce de la sélection ne correspond. Essayez les autres onglets.'
-        : `${matchingPlays.length} captation(s) intégrale(s), dont ${countUnofficial(matchingPlays)} mise(s) en ligne non officielle(s).`);
+    #isVisibleInCatalog(play) {
+      return !this.#library.isHidden(play.identifier)
+        && !(this.#state.hideWatched && this.#library.isWatched(play.identifier));
     }
 
-    #showFavorites() {
-      const matchingFavorites = this.#library.listFavorites()
-        .filter((play) => matchesSearchText(play, this.#state.searchText));
-
-      this.#resultsView.replace(matchingFavorites);
+    #showCuratedPlays() {
       this.#elements.loadMoreButton.hidden = true;
-      this.#setStatus(matchingFavorites.length === 0
-        ? 'Aucun favori pour l’instant. Cliquez sur ☆ pour en ajouter.'
-        : `${matchingFavorites.length} favori(s).`);
+      if (this.#curatedPlays === null) {
+        this.#resultsView.replace([]);
+        this.#setStatus('Chargement de la sélection…');
+        return;
+      }
+
+      const matchingPlays = this.#curatedPlays.filter((play) => matchesSearchText(play, this.#state.searchText)
+        && matchesCuratedFilters(play, this.#state.curatedFilters));
+      const visiblePlays = sortLocally(matchingPlays.filter((play) => this.#isVisibleInCatalog(play)), this.#state.sort);
+      this.#state.maskedCount = matchingPlays.length - visiblePlays.length;
+      this.#resultsView.replace(visiblePlays);
+
+      if (visiblePlays.length === 0) {
+        this.#setStatus('Aucune pièce de la sélection ne correspond. Changez de filtres ou essayez les autres onglets.');
+        return;
+      }
+      const unofficialCount = countUnofficial(visiblePlays);
+      const unofficialPart = unofficialCount === 0 ? '' : `, dont ${unofficialCount} non officielle(s)`;
+      this.#setStatus(`${pluralize(visiblePlays.length, 'captation intégrale', 'captations intégrales')}`
+        + `${unofficialPart}${this.#describeMaskedCount()}.`);
+    }
+
+    #showPersonalList() {
+      const isFavoritesList = this.#state.listMode === LIST_MODES.favorites;
+      const savedPlays = isFavoritesList ? this.#library.listFavorites() : this.#library.listWatchLater();
+      const matchingPlays = savedPlays.filter((play) => matchesSearchText(play, this.#state.searchText));
+      const visiblePlays = sortLocally(
+        matchingPlays.filter((play) => !(this.#state.hideWatched && this.#library.isWatched(play.identifier))),
+        this.#state.sort,
+      );
+      this.#state.maskedCount = matchingPlays.length - visiblePlays.length;
+
+      this.#resultsView.replace(visiblePlays);
+      this.#elements.loadMoreButton.hidden = true;
+      if (savedPlays.length === 0) {
+        this.#setStatus(isFavoritesList
+          ? 'Aucun favori pour l’instant. Cliquez sur ☆ sous une pièce pour l’ajouter.'
+          : 'Votre liste « À voir plus tard » est vide. Cliquez sur le signet sous une pièce pour l’ajouter.');
+        return;
+      }
+      this.#setStatus(`${pluralize(visiblePlays.length, 'pièce', 'pièces')}${this.#describeMaskedCount()}.`);
     }
 
     async #fetchPage({ isFirstPage }) {
@@ -1132,13 +1442,15 @@
           signal: abortController.signal,
         });
 
+        const visiblePlays = plays.filter((play) => this.#isVisibleInCatalog(play));
         if (isFirstPage) {
-          this.#resultsView.replace(plays);
+          this.#resultsView.replace(visiblePlays);
         } else {
-          this.#resultsView.append(plays);
+          this.#resultsView.append(visiblePlays);
         }
         this.#state.totalCount = totalCount;
         this.#state.loadedCount += plays.length;
+        this.#state.maskedCount += plays.length - visiblePlays.length;
         this.#renderPaginationState();
       } catch (searchError) {
         if (isAbortError(searchError)) {
@@ -1162,11 +1474,93 @@
       this.#elements.loadMoreButton.hidden = loadedCount >= totalCount;
       this.#setStatus(totalCount === 0
         ? 'Aucune pièce trouvée. Essayez un autre mot-clé ou une autre catégorie.'
-        : `${loadedCount} sur ${totalCount} résultat(s).`);
+        : `${loadedCount} sur ${totalCount} résultat(s)${this.#describeMaskedCount()}.`);
+    }
+
+    #describeMaskedCount() {
+      return this.#state.maskedCount === 0 ? '' : ` · ${this.#state.maskedCount} masquée(s) (vues ou retirées par vous)`;
+    }
+
+    #onPlayHidden() {
+      this.#state.maskedCount += 1;
+      this.#renderDataControls();
+      this.#setStatus(`Résultat masqué. Pour le retrouver : « Réafficher les résultats masqués », en bas de page.`);
+    }
+
+    #onPersonalStateChange(identifier) {
+      this.#resultsView.refreshCard(identifier);
+      if (this.#state.hideWatched && this.#library.isWatched(identifier)) {
+        this.#resultsView.removeCard(identifier);
+      }
+    }
+
+    #openRandomPlay() {
+      const candidatePlays = this.#resultsView.listDisplayedPlays()
+        .filter((play) => !this.#library.isWatched(play.identifier) && !this.#availability.isUnavailable(play.identifier));
+      const randomPlay = pickRandomItem(candidatePlays);
+      if (randomPlay === undefined) {
+        this.#setStatus('Aucune pièce non vue à tirer au sort ici. Changez d’onglet ou de filtres.');
+        return;
+      }
+      this.#playerDialog.open(randomPlay);
+    }
+
+    #exportLibrary() {
+      const snapshot = this.#library.exportSnapshot();
+      const backupBlob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+      const downloadUrl = URL.createObjectURL(backupBlob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = downloadUrl;
+      downloadLink.download = `rideau-sauvegarde-${todayIsoDate()}.json`;
+      downloadLink.click();
+      // Révoquer l'URL dans la foulée peut interrompre le téléchargement sur certains navigateurs.
+      clearTimeout(this.#revokeTimeoutId);
+      this.#revokeTimeoutId = setTimeout(() => URL.revokeObjectURL(downloadUrl), BLOB_URL_REVOKE_DELAY_MS);
+      this.#setDataStatus(`Sauvegarde téléchargée (${this.#describeCounts(this.#library.countEntries())}).`);
+    }
+
+    async #importLibrary(changeEvent) {
+      const fileInput = changeEvent.target;
+      const [backupFile] = fileInput.files ?? [];
+      if (backupFile === undefined) {
+        return;
+      }
+      try {
+        const importedCounts = this.#library.importSnapshot(JSON.parse(await backupFile.text()));
+        this.#setDataStatus(`Sauvegarde importée et fusionnée (${this.#describeCounts(importedCounts)}).`);
+        this.#renderDataControls();
+        this.#startNewSearch();
+      } catch (importError) {
+        console.error(importError);
+        this.#setDataStatus('Ce fichier n’est pas une sauvegarde Rideau valide. Choisissez un fichier rideau-sauvegarde-….json.');
+      } finally {
+        fileInput.value = '';
+      }
+    }
+
+    #describeCounts(counts) {
+      return [
+        pluralize(counts.favorites, 'favori', 'favoris'),
+        `${counts.watchLater} à voir plus tard`,
+        pluralize(counts.watched, 'pièce vue', 'pièces vues'),
+        pluralize(counts.progress, 'lecture en cours', 'lectures en cours'),
+        pluralize(counts.hidden, 'résultat masqué', 'résultats masqués'),
+      ].join(', ');
+    }
+
+    #unhideAll() {
+      this.#library.unhideAll();
+      this.#renderDataControls();
+      this.#setDataStatus('Tous les résultats masqués sont de nouveau visibles.');
+      this.#startNewSearch();
     }
 
     #setStatus(message) {
       this.#elements.statusMessage.textContent = message;
+    }
+
+    #setDataStatus(message) {
+      this.#elements.dataStatus.textContent = message;
     }
   }
 
@@ -1182,13 +1576,20 @@
     searchInput: queryRequiredElement('#search-input'),
     categoryTabs: queryRequiredElement('#category-tabs'),
     sortSelect: queryRequiredElement('#sort-select'),
-    favoritesCheckbox: queryRequiredElement('#favorites-only'),
+    listModeSelect: queryRequiredElement('#list-mode-select'),
+    hideWatchedCheckbox: queryRequiredElement('#hide-watched'),
+    curatedFilters: queryRequiredElement('#curated-filters'),
+    surpriseButton: queryRequiredElement('#surprise-button'),
     statusMessage: queryRequiredElement('#status-message'),
     resultsGrid: queryRequiredElement('#results-grid'),
     loadMoreButton: queryRequiredElement('#load-more'),
     externalLinksList: queryRequiredElement('#external-links-list'),
     playerDialog: queryRequiredElement('#player-dialog'),
     cardTemplate: queryRequiredElement('#card-template'),
+    exportButton: queryRequiredElement('#export-button'),
+    importInput: queryRequiredElement('#import-input'),
+    unhideButton: queryRequiredElement('#unhide-button'),
+    dataStatus: queryRequiredElement('#data-status'),
   });
 
   rideauApp.start();
