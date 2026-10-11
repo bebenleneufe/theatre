@@ -1288,3 +1288,161 @@ img {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --- Écran du salon : télécommande --- */
+.player.is-casting .player-stage {
+  opacity: 0.35;
+}
+
+.player.is-casting .player-summary,
+.player.is-casting .tag-list {
+  display: none;
+}
+
+.remote {
+  display: grid;
+  gap: 14px;
+  padding: 18px 24px 4px;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--spotlight);
+}
+
+.remote-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--color-brass);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.remote-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-velvet-bright);
+  box-shadow: 0 0 0 4px rgb(224 74 100 / 0.25);
+  animation: remote-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes remote-pulse {
+  50% {
+    box-shadow: 0 0 0 7px rgb(224 74 100 / 0);
+  }
+}
+
+.remote-progress {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.remote-time {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.remote-seek {
+  width: 100%;
+  accent-color: var(--color-velvet-bright);
+}
+
+.remote-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.remote-button {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--color-line);
+  border-radius: 50%;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.remote-button:active {
+  transform: scale(0.96);
+}
+
+.remote-button-main {
+  width: 84px;
+  height: 84px;
+  border-color: var(--color-velvet);
+  background: var(--color-velvet);
+  color: var(--color-on-velvet);
+  font-size: 1.6rem;
+  box-shadow: 0 10px 30px -8px rgb(194 45 72 / 0.7);
+}
+
+.remote-stop {
+  justify-self: center;
+  margin-bottom: 8px;
+}
+
+/* --- Écran du salon : réglages --- */
+.link-state {
+  margin-left: 8px;
+  padding: 2px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.link-state.is-linked {
+  border-color: var(--color-brass);
+  color: var(--color-brass);
+}
+
+.screen-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.text-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.text-input:focus {
+  border-color: var(--color-brass);
+  outline: none;
+}
+
+.footer-help code {
+  padding: 1px 6px;
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  font-size: 0.85em;
+}
+
+/* La télécommande porte déjà « Arrêter la diffusion » : pas de doublon en bas de fiche. */
+.player.is-casting #player-cast {
+  display: none;
+}

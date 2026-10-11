@@ -11,6 +11,22 @@
   const BLOB_URL_REVOKE_DELAY_MS = 1000;
   const CURATED_PLAYS_EVENT = 'rideau:curated-plays';
 
+  // Diffusion sur l'écran du salon (tableau ScreenDisplay sous Fully Kiosk) :
+  // le téléphone garde le son et publie sa position sur un canal ntfy.
+  const NTFY_ORIGIN = 'https://ntfy.sh';
+  const SCREEN_TOPIC_PATTERN = /^[\w-]{16,64}$/;
+  const SCREEN_SETUP_HASH_KEY = 'ecran';
+  // ntfy.sh tolère environ un message toutes les 5 s en continu : 6 s de
+  // battement laisse de la marge pour les pauses et les sauts.
+  const CAST_HEARTBEAT_MS = 6000;
+  const CAST_PUBLISH_MIN_INTERVAL_MS = 1000;
+  const CAST_SEEK_STEP_SECONDS = 30;
+  const CAST_JUMP_THRESHOLD_SECONDS = 2;
+  const SEEK_PREVIEW_INTERVAL_MS = 100;
+  const PLAYER_STATE_ENDED = 0;
+  const PLAYER_STATE_PLAYING = 1;
+  const PLAYER_STATE_PAUSED = 2;
+
   // Pour une vidéo supprimée ou privée, YouTube sert une vignette de remplacement
   // de 120 px de large à la place de la vraie (480 px) : c'est notre seul indice
   // côté navigateur, l'API oEmbed ne répondant pas aux requêtes cross-origin.
@@ -130,6 +146,14 @@
     return `${hours} h ${minutes}`;
   }
 
+  function formatClock(totalSeconds) {
+    const roundedSeconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(roundedSeconds / 3600);
+    const minutes = Math.floor((roundedSeconds % 3600) / 60);
+    const seconds = String(roundedSeconds % 60).padStart(2, '0');
+    return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
+  }
+
   function pickRandomItem(items) {
     return items.length === 0 ? undefined : items[Math.floor(Math.random() * items.length)];
   }
@@ -170,15 +194,20 @@
   // Le lecteur YouTube diffuse sa position par postMessage (protocole de l'IFrame API).
   // On l'écoute directement plutôt que de charger le script officiel, qui exige
   // de déclarer une fonction globale window.onYouTubeIframeAPIReady.
-  function parsePlayerPosition(messageData) {
+  // Les messages du lecteur arrivent par morceaux : position, durée et état
+  // de lecture ne sont pas toujours présents ensemble, d'où les null.
+  function parsePlayerInfo(messageData) {
     try {
       const playerMessage = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
-      const playerInfo = playerMessage?.info;
-      if (playerMessage?.event !== 'infoDelivery' || typeof playerInfo?.currentTime !== 'number') {
+      if (playerMessage?.event !== 'infoDelivery' || !isPlainObject(playerMessage.info)) {
         return null;
       }
-      const durationSeconds = Number(playerInfo.duration);
-      return durationSeconds > 0 ? { seconds: playerInfo.currentTime, durationSeconds } : null;
+      const { currentTime, duration, playerState } = playerMessage.info;
+      return {
+        seconds: typeof currentTime === 'number' ? currentTime : null,
+        durationSeconds: Number(duration) > 0 ? Number(duration) : null,
+        playerState: typeof playerState === 'number' ? playerState : null,
+      };
     } catch {
       return null;
     }
@@ -828,6 +857,306 @@
     }
   }
 
+  // --- screenLink ---
+  const SCREEN_LINK_KEY = 'rideau.ecran.v1';
+
+  function readStoredScreenTopic() {
+    try {
+      const storedTopic = localStorage.getItem(SCREEN_LINK_KEY);
+      return storedTopic !== null && SCREEN_TOPIC_PATTERN.test(storedTopic) ? storedTopic : null;
+    } catch (storageError) {
+      console.warn('Lien avec l’écran du salon illisible.', storageError);
+      return null;
+    }
+  }
+
+  // Le nom du canal ntfy sert de mot de passe : il ne vit que dans le navigateur
+  // du téléphone, jamais dans ce dépôt public.
+  class ScreenLink {
+    #topic = readStoredScreenTopic();
+
+    isLinked() {
+      return this.#topic !== null;
+    }
+
+    link(candidateTopic) {
+      const topic = String(candidateTopic ?? '').trim();
+      if (!SCREEN_TOPIC_PATTERN.test(topic)) {
+        return false;
+      }
+      this.#topic = topic;
+      this.#persist();
+      return true;
+    }
+
+    unlink() {
+      this.#topic = null;
+      this.#persist();
+    }
+
+    async publish(message) {
+      if (this.#topic === null) {
+        return false;
+      }
+      try {
+        const response = await fetch(`${NTFY_ORIGIN}/${encodeURIComponent(this.#topic)}`, {
+          method: 'POST',
+          body: JSON.stringify(message),
+          // Permet au message « stop » de partir même si la page se ferme.
+          keepalive: true,
+        });
+        return response.ok;
+      } catch (publishError) {
+        console.warn('Écran du salon injoignable.', publishError);
+        return false;
+      }
+    }
+
+    #persist() {
+      try {
+        if (this.#topic === null) {
+          localStorage.removeItem(SCREEN_LINK_KEY);
+        } else {
+          localStorage.setItem(SCREEN_LINK_KEY, this.#topic);
+        }
+      } catch (storageError) {
+        console.warn('Impossible d’enregistrer le lien avec l’écran du salon.', storageError);
+      }
+    }
+  }
+
+  // --- castSession ---
+  // Le téléphone reste le seul lecteur qu'on entend : il publie sa position,
+  // l'écran se cale dessus. La télécommande pilote donc le lecteur du téléphone,
+  // jamais l'écran directement.
+  class CastSession {
+    #screenLink;
+    #sendPlayerCommand;
+    #onActiveChange;
+    #panelElement;
+    #statusElement;
+    #toggleButton;
+    #backButton;
+    #forwardButton;
+    #seekInput;
+    #elapsedElement;
+    #totalElement;
+    #stopButton;
+    #play = null;
+    #snapshot = { seconds: 0, durationSeconds: 0, isPlaying: false, receivedAt: 0 };
+    #heartbeatIntervalId = null;
+    #wakeLock = null;
+    #isDraggingSeek = false;
+
+    #throttledPublish = throttle(() => this.#publishState(), CAST_PUBLISH_MIN_INTERVAL_MS);
+    #throttledSeekPreview = throttle(() => this.#renderSeekPreview(), SEEK_PREVIEW_INTERVAL_MS);
+    #handleToggleClick = () => this.#togglePlayback();
+    #handleBackClick = () => this.#seekBy(-CAST_SEEK_STEP_SECONDS);
+    #handleForwardClick = () => this.#seekBy(CAST_SEEK_STEP_SECONDS);
+    #handleSeekInput = () => {
+      this.#isDraggingSeek = true;
+      this.#throttledSeekPreview();
+    };
+    #handleSeekChange = () => {
+      this.#isDraggingSeek = false;
+      this.#seekTo(Number(this.#seekInput.value));
+    };
+    #handleStopClick = () => this.stop();
+    #handleVisibilityChange = () => {
+      // Le verrou d'écran tombe dès que la page passe en arrière-plan : on le reprend au retour.
+      if (document.visibilityState === 'visible' && this.isActive()) {
+        this.#acquireWakeLock();
+      }
+    };
+
+    constructor({ panelElement, screenLink, sendPlayerCommand, onActiveChange }) {
+      this.#panelElement = panelElement;
+      this.#statusElement = panelElement.querySelector('#remote-status');
+      this.#toggleButton = panelElement.querySelector('#remote-toggle');
+      this.#backButton = panelElement.querySelector('#remote-back');
+      this.#forwardButton = panelElement.querySelector('#remote-forward');
+      this.#seekInput = panelElement.querySelector('#remote-seek');
+      this.#elapsedElement = panelElement.querySelector('#remote-elapsed');
+      this.#totalElement = panelElement.querySelector('#remote-total');
+      this.#stopButton = panelElement.querySelector('#remote-stop');
+      this.#screenLink = screenLink;
+      this.#sendPlayerCommand = sendPlayerCommand;
+      this.#onActiveChange = onActiveChange;
+
+      this.#toggleButton.addEventListener('click', this.#handleToggleClick);
+      this.#backButton.addEventListener('click', this.#handleBackClick);
+      this.#forwardButton.addEventListener('click', this.#handleForwardClick);
+      this.#seekInput.addEventListener('input', this.#handleSeekInput);
+      this.#seekInput.addEventListener('change', this.#handleSeekChange);
+      this.#stopButton.addEventListener('click', this.#handleStopClick);
+      document.addEventListener('visibilitychange', this.#handleVisibilityChange);
+    }
+
+    isActive() {
+      return this.#play !== null;
+    }
+
+    start(play, startSeconds) {
+      this.#play = play;
+      this.#snapshot = {
+        seconds: startSeconds,
+        durationSeconds: play.durationSeconds ?? 0,
+        isPlaying: false,
+        receivedAt: Date.now(),
+      };
+      this.#panelElement.hidden = false;
+      this.#setStatus('Sur l’écran du salon · le son reste sur ce téléphone');
+      this.#renderRemote();
+      this.#acquireWakeLock();
+      this.#publishState();
+      clearInterval(this.#heartbeatIntervalId);
+      this.#heartbeatIntervalId = setInterval(() => this.#publishState(), CAST_HEARTBEAT_MS);
+      this.#onActiveChange(true);
+    }
+
+    stop({ notifyScreen = true } = {}) {
+      if (!this.isActive()) {
+        return;
+      }
+      if (notifyScreen) {
+        this.#screenLink.publish({ v: 1, type: 'stop' });
+      }
+      clearInterval(this.#heartbeatIntervalId);
+      this.#heartbeatIntervalId = null;
+      this.#throttledPublish.cancel();
+      this.#throttledSeekPreview.cancel();
+      this.#releaseWakeLock();
+      this.#play = null;
+      this.#isDraggingSeek = false;
+      this.#panelElement.hidden = true;
+      this.#onActiveChange(false);
+    }
+
+    handlePlayerUpdate({ seconds, durationSeconds, playerState }) {
+      if (!this.isActive()) {
+        return;
+      }
+      if (playerState === PLAYER_STATE_ENDED) {
+        this.stop();
+        return;
+      }
+      const expectedSeconds = this.#estimateSeconds();
+      const wasPlaying = this.#snapshot.isPlaying;
+      if (seconds !== null) {
+        this.#snapshot.seconds = seconds;
+        this.#snapshot.receivedAt = Date.now();
+      }
+      if (durationSeconds !== null) {
+        this.#snapshot.durationSeconds = durationSeconds;
+      }
+      // La mise en mémoire tampon (état 3) ne change rien : l'écran continue au même rythme.
+      if (playerState === PLAYER_STATE_PLAYING || playerState === PLAYER_STATE_PAUSED) {
+        this.#snapshot.isPlaying = playerState === PLAYER_STATE_PLAYING;
+      }
+
+      const hasJumped = seconds !== null && Math.abs(seconds - expectedSeconds) > CAST_JUMP_THRESHOLD_SECONDS;
+      if (wasPlaying !== this.#snapshot.isPlaying || hasJumped) {
+        this.#throttledPublish();
+      }
+      this.#renderRemote();
+    }
+
+    destroy() {
+      this.stop();
+      this.#toggleButton.removeEventListener('click', this.#handleToggleClick);
+      this.#backButton.removeEventListener('click', this.#handleBackClick);
+      this.#forwardButton.removeEventListener('click', this.#handleForwardClick);
+      this.#seekInput.removeEventListener('input', this.#handleSeekInput);
+      this.#seekInput.removeEventListener('change', this.#handleSeekChange);
+      this.#stopButton.removeEventListener('click', this.#handleStopClick);
+      document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
+    }
+
+    #estimateSeconds() {
+      const { seconds, isPlaying, receivedAt } = this.#snapshot;
+      return isPlaying ? seconds + (Date.now() - receivedAt) / 1000 : seconds;
+    }
+
+    async #publishState() {
+      if (!this.isActive()) {
+        return;
+      }
+      const isDelivered = await this.#screenLink.publish({
+        v: 1,
+        type: 'state',
+        youtubeId: this.#play.youtubeId,
+        title: this.#play.title,
+        position: Math.round(this.#estimateSeconds() * 10) / 10,
+        playing: this.#snapshot.isPlaying,
+        sentAt: Date.now(),
+      });
+      if (this.isActive()) {
+        this.#setStatus(isDelivered
+          ? 'Sur l’écran du salon · le son reste sur ce téléphone'
+          : 'Écran injoignable, nouvel essai dans quelques secondes…');
+      }
+    }
+
+    #togglePlayback() {
+      this.#sendPlayerCommand(this.#snapshot.isPlaying ? 'pauseVideo' : 'playVideo');
+    }
+
+    #seekBy(offsetSeconds) {
+      this.#seekTo(this.#estimateSeconds() + offsetSeconds);
+    }
+
+    #seekTo(targetSeconds) {
+      const maximumSeconds = this.#snapshot.durationSeconds > 0 ? this.#snapshot.durationSeconds - 1 : targetSeconds;
+      const boundedSeconds = Math.max(0, Math.min(targetSeconds, maximumSeconds));
+      this.#sendPlayerCommand('seekTo', [boundedSeconds, true]);
+    }
+
+    #renderRemote() {
+      const { durationSeconds, isPlaying } = this.#snapshot;
+      this.#toggleButton.textContent = isPlaying ? '❚❚' : '▶';
+      this.#toggleButton.setAttribute('aria-label', isPlaying ? 'Mettre en pause' : 'Reprendre la lecture');
+      this.#totalElement.textContent = durationSeconds > 0 ? formatClock(durationSeconds) : '–:––';
+      this.#seekInput.max = String(Math.floor(durationSeconds));
+      if (!this.#isDraggingSeek) {
+        const currentSeconds = this.#estimateSeconds();
+        this.#seekInput.value = String(Math.floor(currentSeconds));
+        this.#elapsedElement.textContent = formatClock(currentSeconds);
+      }
+    }
+
+    #renderSeekPreview() {
+      this.#elapsedElement.textContent = formatClock(Number(this.#seekInput.value));
+    }
+
+    #setStatus(message) {
+      this.#statusElement.textContent = message;
+    }
+
+    async #acquireWakeLock() {
+      if (!('wakeLock' in navigator) || this.#wakeLock !== null) {
+        return;
+      }
+      try {
+        this.#wakeLock = await navigator.wakeLock.request('screen');
+        this.#wakeLock.addEventListener('release', () => {
+          this.#wakeLock = null;
+        }, { once: true });
+      } catch (wakeLockError) {
+        console.warn('Impossible d’empêcher la mise en veille du téléphone.', wakeLockError);
+      }
+    }
+
+    async #releaseWakeLock() {
+      try {
+        await this.#wakeLock?.release();
+      } catch (releaseError) {
+        console.warn('Verrou d’écran déjà relâché.', releaseError);
+      } finally {
+        this.#wakeLock = null;
+      }
+    }
+  }
+
   // --- playerDialog ---
   class PlayerDialog {
     #dialogElement;
@@ -840,19 +1169,23 @@
     #favoriteButton;
     #watchLaterButton;
     #watchedButton;
+    #castButton;
     #closeButton;
     #library;
     #availability;
+    #screenLink;
+    #castSession;
     #onPersonalStateChange;
     #currentPlay = null;
     #playerFrame = null;
-    #lastPosition = null;
+    #playerSnapshot = null;
 
     #throttledProgressSave = throttle(() => this.#saveProgress(), PROGRESS_SAVE_INTERVAL_MS);
     #handleCloseClick = () => this.#dialogElement.close();
     #handleFavoriteClick = () => this.#togglePersonalState((play) => this.#library.toggleFavorite(play));
     #handleWatchLaterClick = () => this.#togglePersonalState((play) => this.#library.toggleWatchLater(play));
     #handleWatchedClick = () => this.#togglePersonalState((play) => this.#library.toggleWatched(play.identifier));
+    #handleCastClick = () => this.#toggleCasting();
     #handleLaunchClick = (clickEvent) => {
       const launchButton = clickEvent.target.closest('[data-start-seconds]');
       if (launchButton !== null) {
@@ -869,11 +1202,18 @@
       if (messageEvent.origin !== YOUTUBE_EMBED_ORIGIN || messageEvent.source !== this.#playerFrame?.contentWindow) {
         return;
       }
-      const position = parsePlayerPosition(messageEvent.data);
-      if (position !== null) {
-        this.#lastPosition = position;
+      const playerInfo = parsePlayerInfo(messageEvent.data);
+      if (playerInfo === null) {
+        return;
+      }
+      this.#playerSnapshot = {
+        seconds: playerInfo.seconds ?? this.#playerSnapshot?.seconds ?? null,
+        durationSeconds: playerInfo.durationSeconds ?? this.#playerSnapshot?.durationSeconds ?? null,
+      };
+      if (playerInfo.seconds !== null) {
         this.#throttledProgressSave();
       }
+      this.#castSession.handlePlayerUpdate(playerInfo);
     };
     #handleDialogClose = () => this.#unloadPlayer();
     #handleBackdropClick = (clickEvent) => {
@@ -882,7 +1222,7 @@
       }
     };
 
-    constructor({ dialogElement, library, availability, onPersonalStateChange }) {
+    constructor({ dialogElement, library, availability, screenLink, onPersonalStateChange }) {
       this.#dialogElement = dialogElement;
       this.#creatorElement = dialogElement.querySelector('#player-creator');
       this.#titleElement = dialogElement.querySelector('#player-title');
@@ -893,15 +1233,24 @@
       this.#favoriteButton = dialogElement.querySelector('#player-favorite');
       this.#watchLaterButton = dialogElement.querySelector('#player-watch-later');
       this.#watchedButton = dialogElement.querySelector('#player-watched');
+      this.#castButton = dialogElement.querySelector('#player-cast');
       this.#closeButton = dialogElement.querySelector('#player-close');
       this.#library = library;
       this.#availability = availability;
+      this.#screenLink = screenLink;
       this.#onPersonalStateChange = onPersonalStateChange;
+      this.#castSession = new CastSession({
+        panelElement: dialogElement.querySelector('#player-remote'),
+        screenLink,
+        sendPlayerCommand: (functionName, functionArguments) => this.#sendPlayerCommand(functionName, functionArguments),
+        onActiveChange: (isCasting) => this.#renderCastState(isCasting),
+      });
 
       this.#closeButton.addEventListener('click', this.#handleCloseClick);
       this.#favoriteButton.addEventListener('click', this.#handleFavoriteClick);
       this.#watchLaterButton.addEventListener('click', this.#handleWatchLaterClick);
       this.#watchedButton.addEventListener('click', this.#handleWatchedClick);
+      this.#castButton.addEventListener('click', this.#handleCastClick);
       this.#frameWrapper.addEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.addEventListener('close', this.#handleDialogClose);
       this.#dialogElement.addEventListener('click', this.#handleBackdropClick);
@@ -917,6 +1266,8 @@
       this.#renderTags(play);
       this.#summaryElement.textContent = play.summary || 'Pas de résumé pour cette captation.';
       this.#frameWrapper.replaceChildren(this.#buildPoster(play));
+      this.#castButton.hidden = !this.#screenLink.isLinked() || this.#availability.isUnavailable(play.identifier);
+      this.#renderCastState(false);
 
       if (!this.#dialogElement.open) {
         this.#dialogElement.showModal();
@@ -929,10 +1280,12 @@
       this.#favoriteButton.removeEventListener('click', this.#handleFavoriteClick);
       this.#watchLaterButton.removeEventListener('click', this.#handleWatchLaterClick);
       this.#watchedButton.removeEventListener('click', this.#handleWatchedClick);
+      this.#castButton.removeEventListener('click', this.#handleCastClick);
       this.#frameWrapper.removeEventListener('click', this.#handleLaunchClick);
       this.#dialogElement.removeEventListener('close', this.#handleDialogClose);
       this.#dialogElement.removeEventListener('click', this.#handleBackdropClick);
       this.#unloadPlayer();
+      this.#castSession.destroy();
     }
 
     #renderTags(play) {
@@ -1021,30 +1374,62 @@
       this.#frameWrapper.replaceChildren(playerFrame);
     }
 
+    #sendPlayerCommand(functionName, functionArguments = []) {
+      this.#playerFrame?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func: functionName, args: functionArguments }),
+        YOUTUBE_EMBED_ORIGIN,
+      );
+    }
+
+    #toggleCasting() {
+      if (this.#currentPlay === null) {
+        return;
+      }
+      if (this.#castSession.isActive()) {
+        this.#castSession.stop();
+        return;
+      }
+      if (this.#playerFrame === null) {
+        const progress = this.#library.getProgress(this.#currentPlay.identifier);
+        const resumeSeconds = progress !== null && progress.seconds >= MINIMUM_RESUME_SECONDS ? progress.seconds : 0;
+        this.#launchPlayer(resumeSeconds);
+        this.#playerSnapshot = { seconds: resumeSeconds, durationSeconds: null };
+      }
+      this.#castSession.start(this.#currentPlay, this.#playerSnapshot?.seconds ?? 0);
+    }
+
+    #renderCastState(isCasting) {
+      this.#dialogElement.classList.toggle('is-casting', isCasting);
+      this.#castButton.textContent = isCasting ? '📺 Arrêter la diffusion' : '📺 Écran du salon';
+      this.#castButton.setAttribute('aria-pressed', String(isCasting));
+    }
+
     #saveProgress() {
-      if (this.#currentPlay === null || this.#lastPosition === null) {
+      const seconds = this.#playerSnapshot?.seconds ?? null;
+      const durationSeconds = this.#playerSnapshot?.durationSeconds ?? null;
+      if (this.#currentPlay === null || seconds === null || durationSeconds === null) {
         return;
       }
       const { identifier } = this.#currentPlay;
-      const { seconds, durationSeconds } = this.#lastPosition;
       if (seconds / durationSeconds >= WATCHED_COMPLETION_RATIO) {
         this.#library.markWatched(identifier);
         this.#library.clearProgress(identifier);
         this.#renderPersonalButtons();
       } else if (seconds >= MINIMUM_RESUME_SECONDS) {
-        this.#library.saveProgress(identifier, this.#lastPosition);
+        this.#library.saveProgress(identifier, { seconds, durationSeconds });
       }
       this.#onPersonalStateChange(identifier);
     }
 
     // Retirer l'iframe coupe la lecture : sinon le son continuerait après fermeture.
     #unloadPlayer() {
+      this.#castSession.stop();
       this.#throttledProgressSave.cancel();
       this.#saveProgress();
       window.removeEventListener('message', this.#handlePlayerMessage);
       this.#playerFrame?.removeEventListener('load', this.#handleFrameLoad);
       this.#playerFrame = null;
-      this.#lastPosition = null;
+      this.#playerSnapshot = null;
       this.#frameWrapper.replaceChildren();
       this.#currentPlay = null;
     }
@@ -1076,6 +1461,7 @@
     #elements;
     #library = new PersonalLibrary();
     #preferences = new Preferences();
+    #screenLink = new ScreenLink();
     #availability = new VideoAvailability();
     #toast;
     #resultsView;
@@ -1130,6 +1516,12 @@
     #handleCuratedPlaysReceived = (dataEvent) => this.#receiveCuratedPlays(dataEvent.detail);
     #handleDocumentReady = () => this.#checkCuratedPlaysLoaded();
     #handleShortcutKeydown = (keyboardEvent) => this.#focusSearchOnShortcut(keyboardEvent);
+    #handleScreenFormSubmit = (submitEvent) => {
+      submitEvent.preventDefault();
+      this.#linkScreen(this.#elements.screenTopicInput.value);
+    };
+    #handleScreenTestClick = () => this.#testScreen();
+    #handleScreenUnlinkClick = () => this.#unlinkScreen();
 
     constructor(elements) {
       this.#elements = elements;
@@ -1154,6 +1546,7 @@
         dialogElement: elements.playerDialog,
         library: this.#library,
         availability: this.#availability,
+        screenLink: this.#screenLink,
         onPersonalStateChange: (identifier) => this.#onPersonalStateChange(identifier),
       });
       this.#restorePreferences();
@@ -1168,6 +1561,8 @@
       this.#renderExternalLinks();
       this.#renderDataControls();
       this.#syncControlsWithState();
+      this.#applyScreenSetupLink();
+      this.#renderScreenLink();
 
       this.#elements.searchInput.addEventListener('input', this.#handleSearchInput);
       this.#elements.sortSelect.addEventListener('change', this.#handleSortChange);
@@ -1179,6 +1574,9 @@
       this.#elements.exportButton.addEventListener('click', this.#handleExportClick);
       this.#elements.importInput.addEventListener('change', this.#handleImportChange);
       this.#elements.unhideButton.addEventListener('click', this.#handleUnhideClick);
+      this.#elements.screenForm.addEventListener('submit', this.#handleScreenFormSubmit);
+      this.#elements.screenTestButton.addEventListener('click', this.#handleScreenTestClick);
+      this.#elements.screenUnlinkButton.addEventListener('click', this.#handleScreenUnlinkClick);
 
       this.#startNewSearch();
     }
@@ -1199,6 +1597,9 @@
       this.#elements.exportButton.removeEventListener('click', this.#handleExportClick);
       this.#elements.importInput.removeEventListener('change', this.#handleImportChange);
       this.#elements.unhideButton.removeEventListener('click', this.#handleUnhideClick);
+      this.#elements.screenForm.removeEventListener('submit', this.#handleScreenFormSubmit);
+      this.#elements.screenTestButton.removeEventListener('click', this.#handleScreenTestClick);
+      this.#elements.screenUnlinkButton.removeEventListener('click', this.#handleScreenUnlinkClick);
       this.#resultsView.destroy();
       this.#resumeShelf.destroy();
       this.#playerDialog.destroy();
@@ -1512,6 +1913,60 @@
       this.#startNewSearch();
     }
 
+    // --- Écran du salon ---
+    // Un lien « …#ecran=nom-du-canal » ouvert sur le téléphone relie l'écran en un geste ;
+    // le nom est aussitôt retiré de l'adresse pour ne pas traîner dans l'historique.
+    #applyScreenSetupLink() {
+      const hashParameters = new URLSearchParams(window.location.hash.slice(1));
+      const setupTopic = hashParameters.get(SCREEN_SETUP_HASH_KEY);
+      if (setupTopic === null) {
+        return;
+      }
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+      if (this.#screenLink.link(setupTopic)) {
+        this.#toast.show('Écran du salon relié. Le bouton 📺 apparaît dans la fiche des pièces.');
+      } else {
+        this.#toast.show('Ce lien d’écran n’est pas valide.');
+      }
+    }
+
+    #linkScreen(candidateTopic) {
+      if (!this.#screenLink.link(candidateTopic)) {
+        this.#setScreenStatus('Ce nom de canal n’est pas valide : 16 à 64 lettres, chiffres, tirets ou soulignés.');
+        return;
+      }
+      this.#elements.screenTopicInput.value = '';
+      this.#renderScreenLink();
+      this.#setScreenStatus('Écran relié. Utilisez « Tester » pour vérifier qu’il répond.');
+    }
+
+    async #testScreen() {
+      this.#setScreenStatus('Envoi d’un message à l’écran…');
+      const isDelivered = await this.#screenLink.publish({ v: 1, type: 'ping' });
+      this.#setScreenStatus(isDelivered
+        ? 'Message envoyé : l’écran doit afficher « Rideau est bien relié à cet écran ».'
+        : 'Impossible de joindre ntfy.sh. Vérifiez la connexion du téléphone.');
+    }
+
+    #unlinkScreen() {
+      this.#screenLink.unlink();
+      this.#renderScreenLink();
+      this.#setScreenStatus('Écran délié.');
+    }
+
+    #renderScreenLink() {
+      const isLinked = this.#screenLink.isLinked();
+      this.#elements.screenLinkedState.textContent = isLinked ? 'Relié' : 'Non relié';
+      this.#elements.screenLinkedState.classList.toggle('is-linked', isLinked);
+      this.#elements.screenTestButton.hidden = !isLinked;
+      this.#elements.screenUnlinkButton.hidden = !isLinked;
+      this.#elements.screenForm.hidden = isLinked;
+    }
+
+    #setScreenStatus(message) {
+      this.#elements.screenStatus.textContent = message;
+    }
+
     #setStatus(message) {
       this.#elements.statusMessage.textContent = message;
     }
@@ -1552,6 +2007,12 @@
     importInput: queryRequiredElement('#import-input'),
     unhideButton: queryRequiredElement('#unhide-button'),
     dataStatus: queryRequiredElement('#data-status'),
+    screenForm: queryRequiredElement('#screen-form'),
+    screenTopicInput: queryRequiredElement('#screen-topic-input'),
+    screenTestButton: queryRequiredElement('#screen-test-button'),
+    screenUnlinkButton: queryRequiredElement('#screen-unlink-button'),
+    screenLinkedState: queryRequiredElement('#screen-linked-state'),
+    screenStatus: queryRequiredElement('#screen-status'),
   });
 
   rideauApp.start();

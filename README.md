@@ -19,6 +19,10 @@ officielles, signalées par un badge orange car elles peuvent disparaître.
 - Bouton pour masquer une pièce (avec « Annuler »), 🎲 « Surprends-moi »
 - Réglages retenus d'une visite à l'autre, raccourci `/` pour chercher
 - **Mes données** : export / import d'un fichier de sauvegarde (fusion, rien n'est effacé)
+- **Écran du salon** : diffuse l'image sur le tableau ScreenDisplay (Fully Kiosk) pendant que le
+  son reste sur le téléphone, avec un écran télécommande (pause, ±30 s, barre de progression).
+  Le téléphone publie sa position sur un canal ntfy, le tableau s'y recale. Liaison une seule
+  fois via « Écran du salon » en bas de page, ou en ouvrant l'appli avec `#ecran=<canal>`.
 - Liens vers d'autres plateformes gratuites (France.tv, ARTE, Comédie-Française)
 - Thème sombre « salle obscure », pensé pour le mobile
 

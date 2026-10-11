@@ -151,6 +151,24 @@
         </div>
         <p id="data-status" class="status" role="status" aria-live="polite"></p>
       </section>
+
+      <section class="footer-section" aria-labelledby="screen-title">
+        <h2 id="screen-title" class="section-title">Écran du salon <span id="screen-linked-state" class="link-state">Non relié</span></h2>
+        <p class="footer-help">
+          Diffuse l’image d’une pièce sur le tableau du salon pendant que le son reste sur ce téléphone.
+          Le nom du canal se trouve dans <code>config.js</code> du tableau (<code>ntfyRideauTopic</code>).
+        </p>
+        <form id="screen-form" class="screen-form">
+          <label class="visually-hidden" for="screen-topic-input">Nom du canal ntfy de l’écran</label>
+          <input id="screen-topic-input" class="text-input" type="text" placeholder="ben_rideau_…" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="button button-ghost" type="submit">Relier</button>
+        </form>
+        <div class="footer-actions">
+          <button id="screen-test-button" class="button button-ghost" type="button" hidden>Tester</button>
+          <button id="screen-unlink-button" class="text-button" type="button" hidden>Délier</button>
+        </div>
+        <p id="screen-status" class="status" role="status" aria-live="polite"></p>
+      </section>
     </div>
   </footer>
 
@@ -162,6 +180,20 @@
   <dialog id="player-dialog" class="player" aria-labelledby="player-title">
     <button id="player-close" class="player-close" type="button" aria-label="Fermer">✕</button>
     <div id="player-frame-wrapper" class="player-stage"></div>
+    <section id="player-remote" class="remote" aria-label="Télécommande de l’écran du salon" hidden>
+      <p class="remote-status"><span class="remote-dot" aria-hidden="true"></span><span id="remote-status"></span></p>
+      <div class="remote-progress">
+        <span id="remote-elapsed" class="remote-time">0:00</span>
+        <input id="remote-seek" class="remote-seek" type="range" min="0" max="0" step="1" value="0" aria-label="Position dans la pièce">
+        <span id="remote-total" class="remote-time">–:––</span>
+      </div>
+      <div class="remote-buttons">
+        <button id="remote-back" class="remote-button" type="button" aria-label="Reculer de 30 secondes">−30 s</button>
+        <button id="remote-toggle" class="remote-button remote-button-main" type="button" aria-label="Reprendre la lecture">▶</button>
+        <button id="remote-forward" class="remote-button" type="button" aria-label="Avancer de 30 secondes">+30 s</button>
+      </div>
+      <button id="remote-stop" class="text-button remote-stop" type="button">Arrêter la diffusion</button>
+    </section>
     <div class="player-body">
       <p id="player-creator" class="player-creator"></p>
       <h2 id="player-title" class="player-title"></h2>
@@ -171,6 +203,7 @@
         <button id="player-favorite" class="button button-ghost" type="button" aria-pressed="false"></button>
         <button id="player-watch-later" class="button button-ghost" type="button" aria-pressed="false"></button>
         <button id="player-watched" class="button button-ghost" type="button" aria-pressed="false"></button>
+        <button id="player-cast" class="button button-brass" type="button" aria-pressed="false" hidden>📺 Écran du salon</button>
         <a id="player-source-link" class="text-button" target="_blank" rel="noopener noreferrer">Voir sur YouTube ↗</a>
       </div>
     </div>
