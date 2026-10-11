@@ -16,16 +16,26 @@
   const NTFY_ORIGIN = 'https://ntfy.sh';
   const SCREEN_TOPIC_PATTERN = /^[\w-]{16,64}$/;
   const SCREEN_SETUP_HASH_KEY = 'ecran';
-  // ntfy.sh tolère environ un message toutes les 5 s en continu : 6 s de
-  // battement laisse de la marge pour les pauses et les sauts.
-  const CAST_HEARTBEAT_MS = 6000;
-  const CAST_PUBLISH_MIN_INTERVAL_MS = 1000;
+  // ntfy.sh gratuit plafonne à 250 messages par jour et par connexion : un
+  // battement toutes les 6 s épuisait le quota en vingt minutes. L'écran
+  // extrapole donc la position tout seul, et le téléphone ne parle que quand
+  // il se passe quelque chose (lecture, pause, saut, mise en mémoire tampon),
+  // plus un signe de vie toutes les 2 minutes : 60 à 100 messages par pièce.
+  const CAST_HEARTBEAT_MS = 2 * 60 * 1000;
+  const CAST_PUBLISH_MIN_INTERVAL_MS = 3000;
+  const PUBLISH_RESULTS = Object.freeze({
+    delivered: 'delivered',
+    quotaExceeded: 'quotaExceeded',
+    unreachable: 'unreachable',
+  });
+  const HTTP_TOO_MANY_REQUESTS = 429;
   const CAST_SEEK_STEP_SECONDS = 30;
   const CAST_JUMP_THRESHOLD_SECONDS = 2;
   const SEEK_PREVIEW_INTERVAL_MS = 100;
   const PLAYER_STATE_ENDED = 0;
   const PLAYER_STATE_PLAYING = 1;
   const PLAYER_STATE_PAUSED = 2;
+  const PLAYER_STATE_BUFFERING = 3;
 
   // Pour une vidéo supprimée ou privée, YouTube sert une vignette de remplacement
   // de 120 px de large à la place de la vraie (480 px) : c'est notre seul indice
@@ -896,7 +906,7 @@
 
     async publish(message) {
       if (this.#topic === null) {
-        return false;
+        return PUBLISH_RESULTS.unreachable;
       }
       try {
         const response = await fetch(`${NTFY_ORIGIN}/${encodeURIComponent(this.#topic)}`, {
@@ -905,10 +915,13 @@
           // Permet au message « stop » de partir même si la page se ferme.
           keepalive: true,
         });
-        return response.ok;
+        if (response.status === HTTP_TOO_MANY_REQUESTS) {
+          return PUBLISH_RESULTS.quotaExceeded;
+        }
+        return response.ok ? PUBLISH_RESULTS.delivered : PUBLISH_RESULTS.unreachable;
       } catch (publishError) {
         console.warn('Écran du salon injoignable.', publishError);
-        return false;
+        return PUBLISH_RESULTS.unreachable;
       }
     }
 
@@ -922,6 +935,17 @@
       } catch (storageError) {
         console.warn('Impossible d’enregistrer le lien avec l’écran du salon.', storageError);
       }
+    }
+  }
+
+  function describeCastStatus(publishResult) {
+    switch (publishResult) {
+      case PUBLISH_RESULTS.delivered:
+        return 'Sur l’écran du salon · le son reste sur ce téléphone';
+      case PUBLISH_RESULTS.quotaExceeded:
+        return 'Quota de messages du jour atteint (250 par connexion). Passez le téléphone en 4G/5G, ou réessayez demain.';
+      default:
+        return 'Écran injoignable, nouvel essai au prochain changement…';
     }
   }
 
@@ -1049,8 +1073,11 @@
       if (durationSeconds !== null) {
         this.#snapshot.durationSeconds = durationSeconds;
       }
-      // La mise en mémoire tampon (état 3) ne change rien : l'écran continue au même rythme.
-      if (playerState === PLAYER_STATE_PLAYING || playerState === PLAYER_STATE_PAUSED) {
+      // Pendant une mise en mémoire tampon, le son s'arrête : l'écran doit
+      // l'attendre, sinon il prendrait de l'avance sans que personne le lui dise.
+      if (playerState === PLAYER_STATE_PLAYING
+        || playerState === PLAYER_STATE_PAUSED
+        || playerState === PLAYER_STATE_BUFFERING) {
         this.#snapshot.isPlaying = playerState === PLAYER_STATE_PLAYING;
       }
 
@@ -1081,7 +1108,7 @@
       if (!this.isActive()) {
         return;
       }
-      const isDelivered = await this.#screenLink.publish({
+      const publishResult = await this.#screenLink.publish({
         v: 1,
         type: 'state',
         youtubeId: this.#play.youtubeId,
@@ -1091,9 +1118,7 @@
         sentAt: Date.now(),
       });
       if (this.isActive()) {
-        this.#setStatus(isDelivered
-          ? 'Sur l’écran du salon · le son reste sur ce téléphone'
-          : 'Écran injoignable, nouvel essai dans quelques secondes…');
+        this.#setStatus(describeCastStatus(publishResult));
       }
     }
 
@@ -1986,10 +2011,13 @@
 
     async #testScreen() {
       this.#setScreenStatus('Envoi d’un message à l’écran…');
-      const isDelivered = await this.#screenLink.publish({ v: 1, type: 'ping' });
-      this.#setScreenStatus(isDelivered
-        ? 'Message envoyé : l’écran doit afficher « Rideau est bien relié à cet écran ».'
-        : 'Impossible de joindre ntfy.sh. Vérifiez la connexion du téléphone.');
+      const publishResult = await this.#screenLink.publish({ v: 1, type: 'ping' });
+      const statusByResult = {
+        [PUBLISH_RESULTS.delivered]: 'Message envoyé : l’écran doit afficher « Rideau est bien relié à cet écran ».',
+        [PUBLISH_RESULTS.quotaExceeded]: 'Quota ntfy du jour atteint pour cette connexion (250 messages). Essayez en 4G/5G, ou demain.',
+        [PUBLISH_RESULTS.unreachable]: 'Impossible de joindre ntfy.sh. Vérifiez la connexion du téléphone.',
+      };
+      this.#setScreenStatus(statusByResult[publishResult]);
     }
 
     #unlinkScreen() {
