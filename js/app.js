@@ -12,6 +12,11 @@
   // librement par les contributeurs, d'où les nombreuses variantes orthographiques.
   const CATEGORIES = [
     {
+      id: 'selection',
+      label: 'Sélection récente',
+      isCurated: true,
+    },
+    {
       id: 'video-fr',
       label: 'Théâtre filmé (FR)',
       badge: 'Vidéo',
@@ -42,6 +47,34 @@
       query: 'collection:librivoxaudio AND language:(english OR eng) AND subject:(drama OR play OR "dramatic reading")',
     },
   ];
+
+  // Captations intégrales vérifiées une à une : publiées sur la chaîne YouTube officielle
+  // du théâtre ou de la compagnie (pas de ré-upload), intégrables, tournées après 2000.
+  // L'année n'est renseignée que lorsqu'elle a pu être confirmée.
+  const CURATED_PLAYS = [
+    { youtubeId: 'lgiuUY3zWfY', title: 'Îles flottantes', creator: 'Kenza Berrada, d’après Brigitte Giraud · Odéon', year: '2026' },
+    { youtubeId: 'kJhd3q7wZE4', title: 'Le Chant d’ivresse', creator: 'Odéon – Théâtre de l’Europe', year: '' },
+    { youtubeId: '_BUbSJ-teQ0', title: 'Combat de nègre et de chiens', creator: 'Koltès · Cie Kobal’t, Théâtre de la Bastille', year: '2022' },
+    { youtubeId: '2Bxz_-9VDlc', title: 'Un sentiment de vie', creator: 'Claudine Galea · Cie Rabeux, Théâtre de la Bastille', year: '' },
+    { youtubeId: 'eG_DjSg5HQ0', title: 'Les Derniers Jours', creator: 'Mise en scène Jean-Michel Rabeux · Cie Rabeux', year: '' },
+    { youtubeId: 'R5lwmbQ3eQk', title: 'Comme il vous plaira', creator: 'Shakespeare · Théâtre du Nord', year: '2018' },
+    { youtubeId: 'ISzpB9gk2gg', title: 'Le Tartuffe ou l’Imposteur (lecture à la table)', creator: 'Molière · Comédie-Française', year: '' },
+    { youtubeId: '9pZecJzEu8U', title: 'Les Fausses Confidences (lecture à la table)', creator: 'Marivaux · Comédie-Française', year: '' },
+    { youtubeId: 'Bv-YuTjXjhc', title: 'Le Menteur', creator: 'Corneille · Théâtre du Lyon', year: '' },
+    { youtubeId: 'na-kfkhTYQI', title: 'Cyrano de Bergerac', creator: 'Rostand · Cie du Berger', year: '2012' },
+    { youtubeId: 'gekAlcby5xQ', title: 'Knock', creator: 'Jules Romains · Cie du Berger', year: '' },
+    { youtubeId: 'mBqQv0tV6ks', title: 'Henry VI', creator: 'Shakespeare · Machine Théâtre, Odéon', year: '2009' },
+    { youtubeId: 'V6dqwQUCrV8', title: 'Lorenzaccio', creator: 'Musset · Cie Philippe Wiart', year: '2009' },
+    { youtubeId: '6yC3Uh9Q5j8', title: 'L’Île des esclaves', creator: 'Marivaux · Théâtre de la vallée', year: '' },
+    { youtubeId: '6Z2wTrQXoW4', title: 'Le Misanthrope à tout prix', creator: 'Cie du Plateau Libre', year: '' },
+    { youtubeId: '6GZksuQggng', title: 'Le Mont Analogue', creator: 'D’après René Daumal · Temps Blancs', year: '' },
+    { youtubeId: 'IMs6bi0J-fA', title: 'L’Espèce humaine ou l’Inimaginable', creator: 'D’après Robert Antelme · Théâtre Amer', year: '' },
+    { youtubeId: 'TsboxpFnPrE', title: 'My Story', creator: 'Céline Ohrel · Cie Diplex', year: '' },
+    { youtubeId: 'wBWsaO7wgnQ', title: 'The Tempest (EN)', creator: 'Shakespeare · The Lord Chamberlain’s Men', year: '2018' },
+    { youtubeId: 'aAzvnV4Qz9w', title: 'Missing (théâtre physique)', creator: 'Gecko', year: '2012' },
+    { youtubeId: 'YSvS9y1WjrE', title: 'The Overcoat (théâtre physique)', creator: 'Gecko', year: '' },
+    { youtubeId: 'yRr9otK7_Ac', title: 'The Race (théâtre physique)', creator: 'Gecko', year: '' },
+  ].map((curatedPlay) => ({ ...curatedPlay, identifier: `youtube:${curatedPlay.youtubeId}`, badge: 'Vidéo' }));
 
   const EXTERNAL_LINKS = [
     {
@@ -158,16 +191,49 @@
     };
   }
 
-  function thumbnailUrl(identifier) {
-    return `${ARCHIVE_ORIGIN}/services/img/${encodeURIComponent(identifier)}`;
+  // --- playSources ---
+  function isYoutubePlay(play) {
+    return typeof play.youtubeId === 'string';
   }
 
-  function embedUrl(identifier) {
-    return `${ARCHIVE_ORIGIN}/embed/${encodeURIComponent(identifier)}`;
+  function thumbnailUrl(play) {
+    return isYoutubePlay(play)
+      ? `https://i.ytimg.com/vi/${encodeURIComponent(play.youtubeId)}/hqdefault.jpg`
+      : `${ARCHIVE_ORIGIN}/services/img/${encodeURIComponent(play.identifier)}`;
   }
 
-  function detailsUrl(identifier) {
-    return `${ARCHIVE_ORIGIN}/details/${encodeURIComponent(identifier)}`;
+  function embedUrl(play) {
+    return isYoutubePlay(play)
+      ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(play.youtubeId)}`
+      : `${ARCHIVE_ORIGIN}/embed/${encodeURIComponent(play.identifier)}`;
+  }
+
+  function detailsUrl(play) {
+    return isYoutubePlay(play)
+      ? `https://www.youtube.com/watch?v=${encodeURIComponent(play.youtubeId)}`
+      : `${ARCHIVE_ORIGIN}/details/${encodeURIComponent(play.identifier)}`;
+  }
+
+  function sourceName(play) {
+    return isYoutubePlay(play) ? 'YouTube' : 'Internet Archive';
+  }
+
+  // --- curatedPlays ---
+  const LOCAL_SORTERS = {
+    'date desc': (first, second) => (second.year || '0').localeCompare(first.year || '0'),
+    'date asc': (first, second) => (first.year || '9999').localeCompare(second.year || '9999'),
+    'titleSorter asc': (first, second) => first.title.localeCompare(second.title, 'fr'),
+  };
+
+  function matchesSearchText(play, searchText) {
+    const normalizedSearch = searchText.trim().toLocaleLowerCase('fr');
+    return `${play.title} ${play.creator}`.toLocaleLowerCase('fr').includes(normalizedSearch);
+  }
+
+  function filterAndSortLocally(plays, { searchText, sort }) {
+    const matchingPlays = plays.filter((play) => matchesSearchText(play, searchText));
+    const sorter = LOCAL_SORTERS[sort];
+    return sorter === undefined ? matchingPlays : matchingPlays.sort(sorter);
   }
   // --- personalLibrary ---
   const STORAGE_KEY = 'rideau.library.v1';
@@ -287,7 +353,7 @@
       const cardElement = this.#cardTemplate.content.firstElementChild.cloneNode(true);
       cardElement.dataset.identifier = play.identifier;
 
-      cardElement.querySelector('.card-thumbnail').src = thumbnailUrl(play.identifier);
+      cardElement.querySelector('.card-thumbnail').src = thumbnailUrl(play);
       cardElement.querySelector('.card-badge').textContent = play.badge;
       cardElement.querySelector('.card-title').textContent = play.title;
       cardElement.querySelector('.card-meta').textContent = [play.creator, play.year]
@@ -373,13 +439,16 @@
     open(play) {
       this.#currentPlay = play;
       this.#titleElement.textContent = play.title;
-      this.#sourceLink.href = detailsUrl(play.identifier);
+      this.#sourceLink.href = detailsUrl(play);
+      this.#sourceLink.textContent = `Voir sur ${sourceName(play)} ↗`;
       this.#renderWatchedButton();
 
       const playerFrame = document.createElement('iframe');
-      playerFrame.src = embedUrl(play.identifier);
+      playerFrame.src = embedUrl(play);
       playerFrame.title = `Lecteur : ${play.title}`;
-      playerFrame.allow = 'fullscreen; autoplay';
+      playerFrame.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture';
+      // YouTube refuse de lire une vidéo intégrée sans en-tête Referer (erreur 153).
+      playerFrame.referrerPolicy = 'strict-origin-when-cross-origin';
       playerFrame.allowFullscreen = true;
       playerFrame.className = 'player-frame';
       this.#frameWrapper.replaceChildren(playerFrame);
@@ -554,6 +623,11 @@
         this.#showFavorites();
         return;
       }
+      if (this.#state.category.isCurated) {
+        this.#searchAbortController?.abort();
+        this.#showCuratedPlays();
+        return;
+      }
       this.#fetchPage({ isFirstPage: true });
     }
 
@@ -562,10 +636,18 @@
       this.#fetchPage({ isFirstPage: false });
     }
 
+    #showCuratedPlays() {
+      const matchingPlays = filterAndSortLocally([...CURATED_PLAYS], this.#state);
+      this.#resultsView.replace(matchingPlays);
+      this.#elements.loadMoreButton.hidden = true;
+      this.#setStatus(matchingPlays.length === 0
+        ? 'Aucune pièce de la sélection ne correspond. Essayez les autres onglets.'
+        : `${matchingPlays.length} captation(s) intégrale(s), publiées par les théâtres et compagnies eux-mêmes.`);
+    }
+
     #showFavorites() {
-      const normalizedSearch = this.#state.searchText.trim().toLocaleLowerCase('fr');
-      const matchingFavorites = this.#library.listFavorites().filter((play) =>
-        `${play.title} ${play.creator}`.toLocaleLowerCase('fr').includes(normalizedSearch));
+      const matchingFavorites = this.#library.listFavorites()
+        .filter((play) => matchesSearchText(play, this.#state.searchText));
 
       this.#resultsView.replace(matchingFavorites);
       this.#elements.loadMoreButton.hidden = true;
