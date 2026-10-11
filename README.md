@@ -21,9 +21,10 @@ officielles, signalées par un badge orange car elles peuvent disparaître.
 - **Mes données** : export / import d'un fichier de sauvegarde (fusion, rien n'est effacé)
 - **Écran du salon** : diffuse l'image sur le tableau ScreenDisplay (Fully Kiosk) pendant que le
   son reste sur le téléphone, avec un écran télécommande (pause, ±30 s, barre de progression).
-  Les deux appareils se présentent par un canal ntfy (2 à 4 messages), puis la position passe
-  chaque seconde par une connexion directe WebRTC sur le Wi-Fi ; si elle échoue, la diffusion
-  continue par ntfy (messages aux changements et toutes les 2 minutes, quota de 250/jour).
+  Les deux appareils se retrouvent sur un petit relais WebSocket hébergé avec le tableau
+  (Cloudflare Durable Object, sans quota à surveiller), puis la position passe chaque seconde
+  par une connexion directe WebRTC sur le Wi-Fi ; si elle échoue, la diffusion continue par
+  le relais.
   Liaison une seule fois via « Écran du salon » en bas de page, ou avec `#ecran=<canal>`.
 - Liens vers d'autres plateformes gratuites (France.tv, ARTE, Comédie-Française)
 - Thème sombre « salle obscure », pensé pour le mobile
@@ -41,7 +42,8 @@ index.html          Page et gabarits HTML
 styles.css          Styles (thème sombre)
 js/app.js           Toute la logique, découpée en sections : config, utils, playSources,
                     curatedPlays, personalLibrary, preferences, toast, videoAvailability,
-                    resultsView, resumeShelf, playerDialog, main
+                    resultsView, resumeShelf, screenLink, directLink,
+                    castSession, playerDialog, main
 js/plays-data.js    La liste des pièces
 ```
 

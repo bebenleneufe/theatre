@@ -12,23 +12,28 @@
   const CURATED_PLAYS_EVENT = 'rideau:curated-plays';
 
   // Diffusion sur l'écran du salon (tableau ScreenDisplay sous Fully Kiosk) :
-  // le téléphone garde le son et publie sa position sur un canal ntfy.
-  const NTFY_ORIGIN = 'https://ntfy.sh';
+  // le téléphone garde le son et publie sa position. Les deux appareils se
+  // retrouvent sur le relais du Worker qui sert le tableau (un canal nommé,
+  // par WebSocket), puis passent en direct par WebRTC sur le Wi-Fi.
+  const SCREEN_RELAY_URL = 'wss://tableau.bebenleneufe.workers.dev/rideau/relais/';
   const SCREEN_TOPIC_PATTERN = /^[\w-]{16,64}$/;
   const SCREEN_SETUP_HASH_KEY = 'ecran';
-  // ntfy.sh gratuit plafonne à 250 messages par jour et par connexion : un
-  // battement toutes les 6 s épuisait le quota en vingt minutes. L'écran
-  // extrapole donc la position tout seul, et le téléphone ne parle que quand
-  // il se passe quelque chose (lecture, pause, saut, mise en mémoire tampon),
-  // plus un signe de vie toutes les 2 minutes : 60 à 100 messages par pièce.
-  const CAST_HEARTBEAT_MS = 2 * 60 * 1000;
-  const CAST_PUBLISH_MIN_INTERVAL_MS = 3000;
+  const RELAY_CONNECT_TIMEOUT_MS = 8000;
+  // Les proxys coupent une WebSocket muette au bout d'une minute ou deux ;
+  // le relais répond « pong » sans même se réveiller.
+  const RELAY_KEEPALIVE_MS = 30 * 1000;
+  const RELAY_KEEPALIVE_MESSAGE = 'ping';
+  const RELAY_KEEPALIVE_REPLY = 'pong';
+  // Sans diffusion ni test en cours, la connexion au relais n'a plus d'usage.
+  const RELAY_IDLE_CLOSE_MS = 60 * 1000;
+  // Par le relais (connexion directe impossible), un signe de vie toutes les
+  // 2 s suffit : l'écran extrapole la position entre deux messages.
+  const RELAY_HEARTBEAT_MS = 2000;
+  const SCREEN_TEST_TIMEOUT_MS = 6000;
   const PUBLISH_RESULTS = Object.freeze({
     delivered: 'delivered',
-    quotaExceeded: 'quotaExceeded',
     unreachable: 'unreachable',
   });
-  const HTTP_TOO_MANY_REQUESTS = 429;
   // Connexion directe (WebRTC) : une fois établie, la position part chaque seconde.
   const DIRECT_STUN_URL = 'stun:stun.l.google.com:19302';
   const DIRECT_HEARTBEAT_MS = 1000;
@@ -885,10 +890,15 @@
     }
   }
 
-  // Le nom du canal ntfy sert de mot de passe : il ne vit que dans le navigateur
+  // Le nom du canal sert de mot de passe : il ne vit que dans le navigateur
   // du téléphone, jamais dans ce dépôt public.
   class ScreenLink {
     #topic = readStoredScreenTopic();
+    #socket = null;
+    #openingSocket = null;
+    #keepaliveIntervalId = null;
+    #idleTimeoutId = null;
+    #messageHandlers = new Set();
 
     isLinked() {
       return this.#topic !== null;
@@ -899,23 +909,29 @@
       if (!SCREEN_TOPIC_PATTERN.test(topic)) {
         return false;
       }
+      this.disconnect();
       this.#topic = topic;
       this.#persist();
       return true;
     }
 
     unlink() {
+      this.disconnect();
       this.#topic = null;
       this.#persist();
     }
 
-    openStream(handleMessage, sinceUnixSeconds) {
-      if (this.#topic === null) {
-        return null;
-      }
-      const stream = new EventSource(`${NTFY_ORIGIN}/${encodeURIComponent(this.#topic)}/sse?since=${sinceUnixSeconds}`);
-      stream.onmessage = handleMessage;
-      return stream;
+    // Renvoie de quoi se désabonner. S'abonner ouvre la connexion tout de
+    // suite : une réponse rapide de l'écran ne doit pas arriver avant nous.
+    subscribe(handleMessage) {
+      this.#messageHandlers.add(handleMessage);
+      this.#ensureSocket().catch((connectError) => {
+        console.warn('Relais de l’écran injoignable.', connectError);
+      });
+      return () => {
+        this.#messageHandlers.delete(handleMessage);
+        this.#scheduleIdleClose();
+      };
     }
 
     async publish(message) {
@@ -923,19 +939,122 @@
         return PUBLISH_RESULTS.unreachable;
       }
       try {
-        const response = await fetch(`${NTFY_ORIGIN}/${encodeURIComponent(this.#topic)}`, {
-          method: 'POST',
-          body: JSON.stringify(message),
-          // Permet au message « stop » de partir même si la page se ferme.
-          keepalive: true,
-        });
-        if (response.status === HTTP_TOO_MANY_REQUESTS) {
-          return PUBLISH_RESULTS.quotaExceeded;
-        }
-        return response.ok ? PUBLISH_RESULTS.delivered : PUBLISH_RESULTS.unreachable;
+        const socket = await this.#ensureSocket();
+        socket.send(JSON.stringify(message));
+        this.#scheduleIdleClose();
+        return PUBLISH_RESULTS.delivered;
       } catch (publishError) {
         console.warn('Écran du salon injoignable.', publishError);
         return PUBLISH_RESULTS.unreachable;
+      }
+    }
+
+    // Envoi immédiat, sans attente : pour la page qui se ferme, qui ne
+    // laisserait pas une connexion s'ouvrir.
+    sendIfConnected(message) {
+      if (this.#socket?.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+      this.#socket.send(JSON.stringify(message));
+      return true;
+    }
+
+    disconnect() {
+      clearTimeout(this.#idleTimeoutId);
+      this.#idleTimeoutId = null;
+      this.#releaseSocket();
+    }
+
+    #ensureSocket() {
+      if (this.#socket?.readyState === WebSocket.OPEN) {
+        return Promise.resolve(this.#socket);
+      }
+      if (this.#openingSocket !== null) {
+        return this.#openingSocket;
+      }
+      if (this.#topic === null) {
+        return Promise.reject(new Error('Aucun écran relié'));
+      }
+      this.#openingSocket = this.#openSocket(this.#topic).finally(() => {
+        this.#openingSocket = null;
+      });
+      return this.#openingSocket;
+    }
+
+    #openSocket(topic) {
+      return new Promise((resolve, reject) => {
+        const socket = new WebSocket(`${SCREEN_RELAY_URL}${encodeURIComponent(topic)}`);
+        this.#releaseSocket();
+        this.#socket = socket;
+        const timeoutId = setTimeout(() => {
+          this.#dropSocket(socket);
+          reject(new Error('Délai de connexion au relais dépassé'));
+        }, RELAY_CONNECT_TIMEOUT_MS);
+        socket.onopen = () => {
+          clearTimeout(timeoutId);
+          this.#keepaliveIntervalId = setInterval(() => this.#sendKeepalive(socket), RELAY_KEEPALIVE_MS);
+          this.#scheduleIdleClose();
+          resolve(socket);
+        };
+        socket.onmessage = (messageEvent) => this.#dispatchMessage(messageEvent.data);
+        socket.onclose = () => {
+          clearTimeout(timeoutId);
+          this.#dropSocket(socket);
+          reject(new Error('Connexion au relais refusée ou coupée'));
+        };
+      });
+    }
+
+    #sendKeepalive(socket) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(RELAY_KEEPALIVE_MESSAGE);
+      }
+    }
+
+    #dispatchMessage(rawMessage) {
+      if (typeof rawMessage !== 'string' || rawMessage === RELAY_KEEPALIVE_REPLY) {
+        return;
+      }
+      let relayedMessage = null;
+      try {
+        relayedMessage = JSON.parse(rawMessage);
+      } catch (parseError) {
+        console.warn('Message illisible reçu de l’écran.', parseError);
+        return;
+      }
+      for (const handleMessage of this.#messageHandlers) {
+        handleMessage(relayedMessage);
+      }
+    }
+
+    #scheduleIdleClose() {
+      clearTimeout(this.#idleTimeoutId);
+      this.#idleTimeoutId = setTimeout(() => {
+        if (this.#messageHandlers.size === 0) {
+          this.#releaseSocket();
+        }
+      }, RELAY_IDLE_CLOSE_MS);
+    }
+
+    #dropSocket(socket) {
+      if (this.#socket === socket) {
+        this.#releaseSocket();
+      }
+    }
+
+    #releaseSocket() {
+      clearInterval(this.#keepaliveIntervalId);
+      this.#keepaliveIntervalId = null;
+      const socket = this.#socket;
+      this.#socket = null;
+      if (socket === null) {
+        return;
+      }
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
+        socket.close();
       }
     }
 
@@ -953,11 +1072,11 @@
   }
 
   // --- directLink ---
-  // Connexion WebRTC directe téléphone → écran sur le Wi-Fi. ntfy ne sert plus
+  // Connexion WebRTC directe téléphone → écran sur le Wi-Fi. Le relais ne sert
   // qu'à se présenter (une offre, une réponse) ; ensuite la position passe en
-  // direct chaque seconde, sans quota ni aller-retour par internet. Si la
-  // connexion ne s'établit pas (Wi-Fi qui isole les appareils, par exemple),
-  // la diffusion continue simplement par ntfy.
+  // direct chaque seconde, sans aller-retour par internet. Si la connexion ne
+  // s'établit pas (Wi-Fi qui isole les appareils, par exemple), la diffusion
+  // continue simplement par le relais.
   function createSessionId() {
     if (typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
@@ -966,7 +1085,7 @@
   }
 
   // Sans « trickle ICE » : on attend que les adresses candidates soient toutes
-  // dans la description avant de l'envoyer, pour tenir en un seul message ntfy.
+  // dans la description avant de l'envoyer, pour tenir en un seul message.
   function waitForIceGathering(peerConnection, timeoutMs) {
     if (peerConnection.iceGatheringState === 'complete') {
       return Promise.resolve();
@@ -992,11 +1111,11 @@
     #onStateChange;
     #peerConnection = null;
     #dataChannel = null;
-    #signalingStream = null;
+    #unsubscribeSignaling = null;
     #sessionId = null;
     #answerTimeoutId = null;
     #isOpen = false;
-    #handleSignalingMessage = (sseEvent) => this.#onSignalingMessage(sseEvent);
+    #handleSignalingMessage = (signalingMessage) => this.#onSignalingMessage(signalingMessage);
 
     constructor({ screenLink, onStateChange }) {
       this.#screenLink = screenLink;
@@ -1015,9 +1134,7 @@
       const sessionId = createSessionId();
       this.#sessionId = sessionId;
       try {
-        // « since » rejoue les messages récents : la réponse de l'écran est
-        // reçue même si elle arrive avant que l'abonnement soit établi.
-        this.#signalingStream = this.#screenLink.openStream(this.#handleSignalingMessage, Math.floor(Date.now() / 1000) - 5);
+        this.#unsubscribeSignaling = this.#screenLink.subscribe(this.#handleSignalingMessage);
         const peerConnection = new RTCPeerConnection({ iceServers: [{ urls: DIRECT_STUN_URL }] });
         this.#peerConnection = peerConnection;
         const dataChannel = peerConnection.createDataChannel('rideau', { ordered: true });
@@ -1112,17 +1229,12 @@
     }
 
     #closeSignaling() {
-      this.#signalingStream?.close();
-      this.#signalingStream = null;
+      this.#unsubscribeSignaling?.();
+      this.#unsubscribeSignaling = null;
     }
 
-    async #onSignalingMessage(sseEvent) {
+    async #onSignalingMessage(signalingMessage) {
       try {
-        const ntfyEvent = JSON.parse(sseEvent.data);
-        if (ntfyEvent?.event !== 'message') {
-          return;
-        }
-        const signalingMessage = JSON.parse(ntfyEvent.message);
         const isOurAnswer = signalingMessage?.v === 1
           && signalingMessage.type === 'rtc-answer'
           && signalingMessage.session === this.#sessionId
@@ -1138,14 +1250,9 @@
   }
 
   function describeCastStatus(publishResult) {
-    switch (publishResult) {
-      case PUBLISH_RESULTS.delivered:
-        return 'Via internet · le son reste sur ce téléphone';
-      case PUBLISH_RESULTS.quotaExceeded:
-        return 'Quota de messages du jour atteint (250 par connexion). Passez le téléphone en 4G/5G, ou réessayez demain.';
-      default:
-        return 'Écran injoignable, nouvel essai au prochain changement…';
-    }
+    return publishResult === PUBLISH_RESULTS.delivered
+      ? 'Via le relais internet · le son reste sur ce téléphone'
+      : 'Écran injoignable, nouvel essai dans un instant…';
   }
 
   // --- castSession ---
@@ -1172,7 +1279,6 @@
     #wakeLock = null;
     #isDraggingSeek = false;
 
-    #throttledPublish = throttle(() => this.#publishState(), CAST_PUBLISH_MIN_INTERVAL_MS);
     #throttledSeekPreview = throttle(() => this.#renderSeekPreview(), SEEK_PREVIEW_INTERVAL_MS);
     #handleToggleClick = () => this.#togglePlayback();
     #handleBackClick = () => this.#seekBy(-CAST_SEEK_STEP_SECONDS);
@@ -1236,7 +1342,7 @@
       this.#setStatus('Connexion à l’écran du salon…');
       this.#renderRemote();
       this.#acquireWakeLock();
-      // Le premier message passe par ntfy pour ouvrir la pièce sans attendre ;
+      // Le premier message passe par le relais pour ouvrir la pièce sans attendre ;
       // la connexion directe prend le relais dès qu'elle est établie.
       this.#publishState();
       this.#restartHeartbeat();
@@ -1250,14 +1356,15 @@
       }
       if (notifyScreen) {
         const stopMessage = { v: 1, type: 'stop' };
+        // Pas d'attente possible : la page est peut-être en train de se fermer.
         if (!this.#directLink.send(stopMessage)) {
-          this.#screenLink.publish(stopMessage);
+          this.#screenLink.sendIfConnected(stopMessage);
         }
       }
       this.#directLink.close();
+      this.#screenLink.disconnect();
       clearInterval(this.#heartbeatIntervalId);
       this.#heartbeatIntervalId = null;
-      this.#throttledPublish.cancel();
       this.#throttledSeekPreview.cancel();
       this.#releaseWakeLock();
       this.#play = null;
@@ -1293,7 +1400,7 @@
 
       const hasJumped = seconds !== null && Math.abs(seconds - expectedSeconds) > CAST_JUMP_THRESHOLD_SECONDS;
       if (wasPlaying !== this.#snapshot.isPlaying || hasJumped) {
-        this.#requestPublish();
+        this.#publishState();
       }
       this.#renderRemote();
     }
@@ -1315,19 +1422,9 @@
       return isPlaying ? seconds + (Date.now() - receivedAt) / 1000 : seconds;
     }
 
-    // En direct, rien ne coûte : on prévient l'écran tout de suite. Par ntfy,
-    // les changements rapprochés sont regroupés pour ménager le quota.
-    #requestPublish() {
-      if (this.#directLink.isOpen()) {
-        this.#publishState();
-      } else {
-        this.#throttledPublish();
-      }
-    }
-
     #restartHeartbeat() {
       clearInterval(this.#heartbeatIntervalId);
-      const heartbeatMs = this.#directLink.isOpen() ? DIRECT_HEARTBEAT_MS : CAST_HEARTBEAT_MS;
+      const heartbeatMs = this.#directLink.isOpen() ? DIRECT_HEARTBEAT_MS : RELAY_HEARTBEAT_MS;
       this.#heartbeatIntervalId = setInterval(() => this.#publishState(), heartbeatMs);
     }
 
@@ -1337,7 +1434,7 @@
       }
       this.#restartHeartbeat();
       // Connexion directe perdue : l'écran doit savoir tout de suite qu'il
-      // repasse par ntfy, sinon il croirait le téléphone parti.
+      // repasse par le relais, sinon il croirait le téléphone parti.
       this.#publishState();
     }
 
@@ -1890,6 +1987,7 @@
       this.#resultsView.destroy();
       this.#resumeShelf.destroy();
       this.#playerDialog.destroy();
+      this.#screenLink.disconnect();
       this.#toast.destroy();
     }
 
@@ -2253,13 +2351,40 @@
 
     async #testScreen() {
       this.#setScreenStatus('Envoi d’un message à l’écran…');
-      const publishResult = await this.#screenLink.publish({ v: 1, type: 'ping' });
-      const statusByResult = {
-        [PUBLISH_RESULTS.delivered]: 'Message envoyé : l’écran doit afficher « Rideau est bien relié à cet écran ».',
-        [PUBLISH_RESULTS.quotaExceeded]: 'Quota ntfy du jour atteint pour cette connexion (250 messages). Essayez en 4G/5G, ou demain.',
-        [PUBLISH_RESULTS.unreachable]: 'Impossible de joindre ntfy.sh. Vérifiez la connexion du téléphone.',
-      };
-      this.#setScreenStatus(statusByResult[publishResult]);
+      try {
+        const hasAnswered = await this.#waitForScreenAnswer();
+        this.#setScreenStatus(hasAnswered
+          ? 'L’écran a répondu : il affiche « Rideau est bien relié à cet écran ».'
+          : 'Message parti, mais l’écran n’a pas répondu. Le tableau est-il allumé et à jour (rechargez Fully) ?');
+      } catch (testError) {
+        console.warn('Test de l’écran impossible.', testError);
+        this.#setScreenStatus('Impossible de joindre le relais. Vérifiez la connexion du téléphone.');
+      }
+    }
+
+    // L'écran répond « present » à chaque « ping » : on sait ainsi qu'il
+    // écoute vraiment, et pas seulement que le relais a reçu le message.
+    async #waitForScreenAnswer() {
+      let unsubscribe = null;
+      let timeoutId = null;
+      try {
+        const screenAnswer = new Promise((resolve) => {
+          unsubscribe = this.#screenLink.subscribe((relayedMessage) => {
+            if (relayedMessage?.v === 1 && relayedMessage.type === 'present') {
+              resolve(true);
+            }
+          });
+          timeoutId = setTimeout(() => resolve(false), SCREEN_TEST_TIMEOUT_MS);
+        });
+        const publishResult = await this.#screenLink.publish({ v: 1, type: 'ping' });
+        if (publishResult !== PUBLISH_RESULTS.delivered) {
+          throw new Error('Relais injoignable');
+        }
+        return await screenAnswer;
+      } finally {
+        clearTimeout(timeoutId);
+        unsubscribe?.();
+      }
     }
 
     #unlinkScreen() {
