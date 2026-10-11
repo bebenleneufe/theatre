@@ -113,6 +113,64 @@
     },
     { youtubeId: 'TsboxpFnPrE', title: 'My Story', creator: 'Céline Ohrel · Cie Diplex', year: '', duration: '1:34:44', summary: '' },
     {
+      youtubeId: '6XSZpF525Y0', title: 'Le Roi Lear', creator: 'Shakespeare · Mathieu Coblentz, Théâtre Amer', year: '2025', duration: '2:14:32',
+      summary: 'Le vieux roi Lear veut abandonner le pouvoir et partager son royaume entre ses filles, à condition qu’elles lui déclarent publiquement leur amour. Une version épique, entre faste baroque et cabaret glam rock, avec sept comédiens-musiciens. Jouée au Théâtre du Soleil.',
+    },
+    {
+      youtubeId: '3uc_JSJPTgU', title: 'La Mouette', creator: 'Tchekhov · Cie Kobal’t', year: '', duration: '1:46:41',
+      summary: 'Dans une propriété à la campagne, le jeune Treplev fait jouer sa pièce d’avant-garde par Nina, dont il est amoureux. Mais Nina rêve de gloire et se tourne vers Trigorine, écrivain célèbre et amant de la mère de Treplev.',
+    },
+    {
+      youtubeId: '1-W0HpdMVvM', title: 'Britannicus', creator: 'Racine · Cie du Berger', year: '2024', duration: '2:20:32',
+      summary: 'Le jeune empereur Néron fait enlever Junie, promise à son demi-frère Britannicus, et cherche à s’affranchir de sa mère Agrippine. La naissance d’un tyran.',
+    },
+    {
+      youtubeId: 'XjAWavSmbkg', title: 'L’École des femmes', creator: 'Molière · Jean-Marc Chotteau, La Virgule', year: '', duration: '2:10:59',
+      summary: 'Arnolphe a fait élever Agnès dans l’ignorance pour l’épouser sans risque d’être trompé. Mais elle tombe amoureuse du jeune Horace, qui fait d’Arnolphe son confident sans savoir qui il est.',
+    },
+    {
+      youtubeId: 'tZ5Pl6Kso0U', title: 'Le Bourgeois gentilhomme', creator: 'Molière et Lully · Opéra Royal de Versailles', year: '', duration: '2:45:20',
+      summary: 'Monsieur Jourdain, riche bourgeois, veut à tout prix devenir gentilhomme : leçons de danse, de musique, d’escrime et de philosophie, jusqu’à une cérémonie turque grotesque. Comédie-ballet avec la musique de Lully.',
+    },
+    {
+      youtubeId: 'RDoEtysSBqY', title: 'Les Amants magnifiques', creator: 'Molière et Lully · Les Malins Plaisirs', year: '', duration: '2:35:52',
+      summary: 'En Thessalie, deux princes rivalisent de fêtes somptueuses pour obtenir la main de la princesse Ériphile, qui aime en secret Sostrate, un simple général. Comédie-ballet mise en scène par Vincent Tavernier.',
+    },
+    {
+      youtubeId: 'ekAG1dgCCYQ', title: 'Le Dindon', creator: 'Feydeau · Cie du Berger', year: '', duration: '3:07:04',
+      summary: 'Lucienne, épouse fidèle de Vatelin, a juré de le tromper le jour où il la tromperait. Deux séducteurs, Pontagnac et Rédillon, guettent ce moment. Vaudeville de Feydeau.',
+    },
+    {
+      youtubeId: '_9WXMdlV4tI', title: 'Le Dindon', creator: 'Feydeau · La Comédie des Ternes', year: '', duration: '2:19:26',
+      summary: 'Lucienne, épouse fidèle de Vatelin, a juré de le tromper le jour où il la tromperait. Deux séducteurs, Pontagnac et Rédillon, guettent ce moment. Vaudeville de Feydeau.',
+    },
+    {
+      youtubeId: 'VBzB7cuQZvM', title: 'La Dispute', creator: 'Marivaux · Théâtre Olympia, CDN de Tours', year: '', duration: '1:05:48',
+      summary: 'Qui, de l’homme ou de la femme, a été infidèle le premier ? Pour trancher, un prince et sa maîtresse observent quatre jeunes gens élevés à l’écart du monde, qui se rencontrent pour la première fois.',
+    },
+    {
+      youtubeId: 'pcgyT_cPyvQ', title: 'La Cantatrice chauve', creator: 'Ionesco · Cie de la Toque Flamboyante', year: '2026', duration: '1:09:06',
+      summary: 'Dans un salon anglais, les Smith reçoivent les Martin. Leurs banalités dérapent peu à peu vers l’absurde le plus complet. La pièce fondatrice du théâtre de l’absurde.',
+    },
+    {
+      youtubeId: '7c6ehafEvyg', title: 'En attendant Godot', creator: 'Beckett · Écailles Productions', year: '', duration: '2:31:13',
+      summary: 'Au bord d’une route, près d’un arbre, Vladimir et Estragon attendent un certain Godot, qui ne vient jamais.',
+    },
+    {
+      youtubeId: '9_Dm6tje-eg', title: 'Je suis encore en vie', creator: 'Jacques Allaire · Le Tarmac', year: '2014', duration: '58:59',
+      summary: 'Un spectacle presque sans paroles, porté par les corps : une femme sous l’autorité masculine, sous l’ombre de la poétesse afghane Nadia Anjuman, tuée par son mari. Avec Anissa Daoud et Jacques Allaire.',
+    },
+    { youtubeId: '8M1UvkqVQrM', title: 'Huit minutes-lumière', creator: 'Compagnie Inachevée', year: '2022', duration: '2:08:21', summary: '' },
+    { youtubeId: '7912YrR9Pw4', title: 'Chère Amazone', creator: 'Compagnie en Amazone', year: '2015', duration: '1:06:38', summary: '' },
+    {
+      youtubeId: '1OU0cuGuPSk', title: 'Macbeth – 1re partie (EN)', creator: 'Shakespeare · Teller et Aaron Posner, Folger Theatre', year: '2008', duration: '1:09:39',
+      summary: 'Poussé par la prophétie de trois sorcières et par l’ambition de sa femme, le général Macbeth assassine le roi Duncan pour prendre sa place. Mise en scène du magicien Teller et d’Aaron Posner, avec des effets d’illusion. En anglais.',
+    },
+    {
+      youtubeId: 'GLc3w-yp3wk', title: 'Macbeth – 2e partie (EN)', creator: 'Shakespeare · Teller et Aaron Posner, Folger Theatre', year: '2008', duration: '54:40',
+      summary: 'Suite et fin : devenu roi, Macbeth s’enfonce dans le crime et la paranoïa. En anglais.',
+    },
+    {
       youtubeId: 'wBWsaO7wgnQ', title: 'The Tempest (EN)', creator: 'Shakespeare · The Lord Chamberlain’s Men', year: '2018', duration: '1:56:28',
       summary: 'Prospero, duc de Milan détrôné et exilé sur une île avec sa fille Miranda, déclenche une tempête pour faire échouer ses ennemis sur son rivage. En anglais.',
     },

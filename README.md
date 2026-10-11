@@ -9,7 +9,7 @@ captations filmées, théâtre radiophonique et lectures LibriVox (domaine publi
 ## Fonctionnalités
 
 - Recherche par titre, auteur ou mot-clé (Molière, Feydeau, Beckett…)
-- **Sélection récente** : 22 captations intégrales vérifiées, publiées sur YouTube par les
+- **Sélection récente** : 38 captations intégrales vérifiées, publiées sur YouTube par les
   théâtres et compagnies eux-mêmes (Odéon, Comédie-Française, Théâtre du Nord, Gecko…)
 - Catégories Internet Archive (depuis 2000) : théâtre filmé FR / EN, théâtre radiophonique,
   lectures LibriVox FR / EN
