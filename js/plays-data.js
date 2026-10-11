@@ -1,4 +1,4 @@
-// Liste des captations de l'onglet « Sélection récente ».
+// Liste des captations du catalogue.
 //
 // Script classique séparé pour pouvoir ajouter des pièces sans toucher à la logique.
 // Il transmet ses données à js/app.js par un événement plutôt que par une variable

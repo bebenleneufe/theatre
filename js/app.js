@@ -4,9 +4,7 @@
   'use strict';
 
   // --- config ---
-  const PAGE_SIZE = 24;
   const SEARCH_DEBOUNCE_MS = 400;
-  const MINIMUM_YEAR = 2000;
   const PROGRESS_SAVE_INTERVAL_MS = 5000;
   const WATCHED_COMPLETION_RATIO = 0.95;
   const MINIMUM_RESUME_SECONDS = 60;
@@ -17,52 +15,6 @@
   // de 120 px de large à la place de la vraie (480 px) : c'est notre seul indice
   // côté navigateur, l'API oEmbed ne répondant pas aux requêtes cross-origin.
   const REMOVED_VIDEO_THUMBNAIL_WIDTH = 120;
-
-  // Les sujets sont libres sur Internet Archive : comédies musicales, « proshots »
-  // et spectacles tirés d'animes s'y glissent sous l'étiquette « théâtre ».
-  const ARCHIVE_EXCLUSION_CLAUSE = 'NOT (title:(proshot OR musical OR "comédie musicale" OR "opéra rock" OR "opera rock" '
-    + 'OR anime OR "english subs" OR "eng subs" OR "english sub" OR takarazuka OR "ace attorney" OR "the stage") '
-    + 'OR subject:(anime OR manga OR musical OR "comédie musicale" OR "opéra rock" OR "musical theatre"))';
-
-  // Requêtes Lucene d'Internet Archive, ajustées à la main : les sujets y sont saisis
-  // librement par les contributeurs, d'où les nombreuses variantes orthographiques.
-  const CATEGORIES = [
-    {
-      id: 'selection',
-      label: 'Sélection récente',
-      isCurated: true,
-    },
-    {
-      id: 'video-fr',
-      label: 'Théâtre filmé (FR)',
-      badge: 'Vidéo',
-      query: 'mediatype:movies AND (subject:("théâtre" OR "theatre" OR "pièce de théâtre" OR "théâtre filmé")) AND language:(fre OR french OR français)',
-    },
-    {
-      id: 'video-en',
-      label: 'Filmed plays (EN)',
-      badge: 'Vidéo',
-      query: 'mediatype:movies AND subject:("stage play" OR "filmed play" OR "theatre production" OR "filmed theatre")',
-    },
-    {
-      id: 'radio-fr',
-      label: 'Théâtre radiophonique',
-      badge: 'Audio',
-      query: 'mediatype:audio AND subject:("théâtre radiophonique" OR "pièce radiophonique" OR "fiction radiophonique")',
-    },
-    {
-      id: 'audio-fr',
-      label: 'Lectures LibriVox (FR)',
-      badge: 'Audio',
-      query: 'collection:librivoxaudio AND language:(french OR fre) AND subject:(théâtre OR "pièce de théâtre" OR tragédie OR "dramatic reading" OR drama)',
-    },
-    {
-      id: 'audio-en',
-      label: 'LibriVox plays (EN)',
-      badge: 'Audio',
-      query: 'collection:librivoxaudio AND language:(english OR eng) AND subject:(drama OR play OR "dramatic reading")',
-    },
-  ];
 
   const LIST_MODES = {
     all: 'all',
@@ -87,7 +39,7 @@
 
   const LANGUAGE_LABELS = { fr: 'Français', en: 'Anglais', autre: 'Autre langue ou sans paroles' };
   const GENRE_LABELS = { comedie: 'Comédie', classique: 'Classique', contemporain: 'Contemporain' };
-  const LIST_MODE_TITLES = { favorites: 'Mes favoris', watchLater: 'À voir plus tard' };
+  const LIST_MODE_TITLES = { all: 'Toutes les pièces', favorites: 'Mes favoris', watchLater: 'À voir plus tard' };
 
   const SKELETON_CARD_COUNT = 8;
   const TOAST_DURATION_MS = 5000;
@@ -98,11 +50,6 @@
       label: 'France.tv — Théâtre et danse',
       description: 'Captations récentes, disponibles en replay pour une durée limitée.',
       url: 'https://www.france.tv/spectacles-et-culture/theatre-et-danse/',
-    },
-    {
-      label: 'France Culture — Fictions / Théâtre et Cie',
-      description: 'Pièces radiophoniques en podcast.',
-      url: 'https://www.radiofrance.fr/franceculture/podcasts/fictions-theatre-et-cie',
     },
     {
       label: 'ARTE Concert',
@@ -162,20 +109,6 @@
     return throttled;
   }
 
-  const LUCENE_SPECIAL_CHARACTERS = /[+\-!(){}[\]^"~*?:\\/&|]/g;
-
-  function escapeLuceneTerm(rawTerm) {
-    return rawTerm.replace(LUCENE_SPECIAL_CHARACTERS, '\\$&');
-  }
-
-  function isAbortError(error) {
-    return error instanceof DOMException && error.name === 'AbortError';
-  }
-
-  function firstValue(fieldValue) {
-    return Array.isArray(fieldValue) ? fieldValue[0] : fieldValue;
-  }
-
   function parseDurationToSeconds(rawDuration) {
     const durationText = String(rawDuration ?? '').trim();
     if (durationText === '') {
@@ -197,19 +130,6 @@
     return `${hours} h ${minutes}`;
   }
 
-  const MAXIMUM_SUMMARY_LENGTH = 1200;
-
-  // DOMParser produit un document inerte : les scripts et gestionnaires d'événements
-  // présents dans les descriptions (HTML libre saisi par les contributeurs) ne s'exécutent pas.
-  function htmlToPlainText(rawHtml) {
-    const htmlWithLineBreaks = String(rawHtml ?? '').replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n');
-    const parsedDocument = new DOMParser().parseFromString(htmlWithLineBreaks, 'text/html');
-    const plainText = (parsedDocument.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
-    return plainText.length > MAXIMUM_SUMMARY_LENGTH
-      ? `${plainText.slice(0, MAXIMUM_SUMMARY_LENGTH).trimEnd()}…`
-      : plainText;
-  }
-
   function pickRandomItem(items) {
     return items.length === 0 ? undefined : items[Math.floor(Math.random() * items.length)];
   }
@@ -226,107 +146,15 @@
     return `${count} ${count === 1 ? singular : plural}`;
   }
 
-  // --- archiveApi ---
-  const ARCHIVE_ORIGIN = 'https://archive.org';
-  const RETURNED_FIELDS = ['identifier', 'title', 'creator', 'year', 'mediatype'];
-
-  function buildTextClause(searchText) {
-    const terms = searchText
-      .trim()
-      .split(/\s+/)
-      .filter((term) => term.length > 0)
-      .map(escapeLuceneTerm);
-
-    if (terms.length === 0) {
-      return '';
-    }
-
-    const allTerms = terms.join(' AND ');
-    return `(title:(${allTerms}) OR creator:(${allTerms}) OR subject:(${allTerms}) OR description:(${allTerms}))`;
-  }
-
-  function buildQuery(categoryQuery, searchText) {
-    const recentOnlyClause = `year:[${MINIMUM_YEAR} TO 9999]`;
-    return [`(${categoryQuery})`, recentOnlyClause, ARCHIVE_EXCLUSION_CLAUSE, buildTextClause(searchText)]
-      .filter((clause) => clause !== '')
-      .join(' AND ');
-  }
-
-  function toPlay(document, badge) {
-    return {
-      identifier: document.identifier,
-      title: firstValue(document.title) ?? document.identifier,
-      creator: firstValue(document.creator) ?? '',
-      year: String(firstValue(document.year) ?? ''),
-      badge,
-    };
-  }
-
-  async function searchPlays({ category, searchText, sort, page, signal }) {
-    const searchParameters = new URLSearchParams({
-      q: buildQuery(category.query, searchText),
-      rows: String(PAGE_SIZE),
-      page: String(page),
-      output: 'json',
-    });
-    RETURNED_FIELDS.forEach((field) => searchParameters.append('fl[]', field));
-    searchParameters.append('sort[]', sort);
-
-    const response = await fetch(`${ARCHIVE_ORIGIN}/advancedsearch.php?${searchParameters}`, { signal });
-    if (!response.ok) {
-      throw new Error(`Internet Archive a répondu ${response.status}`);
-    }
-
-    const payload = await response.json();
-    return {
-      totalCount: payload.response.numFound,
-      plays: payload.response.docs.map((document) => toPlay(document, category.badge)),
-    };
-  }
-
-  // Plusieurs fichiers « original » = une captation découpée en parties : on additionne.
-  // Sans original mesuré, on se rabat sur le plus long fichier dérivé.
-  function computeTotalDuration(files) {
-    const measuredFiles = files.filter((file) => file.length !== undefined);
-    const originalSeconds = measuredFiles
-      .filter((file) => file.source === 'original')
-      .reduce((totalSeconds, file) => totalSeconds + parseDurationToSeconds(file.length), 0);
-    if (originalSeconds > 0) {
-      return originalSeconds;
-    }
-    return measuredFiles.reduce((longest, file) => Math.max(longest, parseDurationToSeconds(file.length)), 0);
-  }
-
-  async function fetchArchiveDetails(identifier, signal) {
-    const response = await fetch(`${ARCHIVE_ORIGIN}/metadata/${encodeURIComponent(identifier)}`, { signal });
-    if (!response.ok) {
-      throw new Error(`Internet Archive a répondu ${response.status}`);
-    }
-    const payload = await response.json();
-    return {
-      durationSeconds: computeTotalDuration(payload.files ?? []),
-      summary: htmlToPlainText(firstValue(payload.metadata?.description)),
-    };
-  }
-
   // --- playSources ---
   const YOUTUBE_EMBED_ORIGIN = 'https://www.youtube-nocookie.com';
   const YOUTUBE_ID_PATTERN = /^[\w-]{11}$/;
 
-  function isYoutubePlay(play) {
-    return typeof play.youtubeId === 'string';
-  }
-
   function thumbnailUrl(play) {
-    return isYoutubePlay(play)
-      ? `https://i.ytimg.com/vi/${encodeURIComponent(play.youtubeId)}/hqdefault.jpg`
-      : `${ARCHIVE_ORIGIN}/services/img/${encodeURIComponent(play.identifier)}`;
+    return `https://i.ytimg.com/vi/${encodeURIComponent(play.youtubeId)}/hqdefault.jpg`;
   }
 
   function embedUrl(play, startSeconds) {
-    if (!isYoutubePlay(play)) {
-      return `${ARCHIVE_ORIGIN}/embed/${encodeURIComponent(play.identifier)}`;
-    }
     const playerParameters = new URLSearchParams({
       enablejsapi: '1',
       autoplay: '1',
@@ -335,14 +163,8 @@
     return `${YOUTUBE_EMBED_ORIGIN}/embed/${encodeURIComponent(play.youtubeId)}?${playerParameters}`;
   }
 
-  function detailsUrl(play) {
-    return isYoutubePlay(play)
-      ? `https://www.youtube.com/watch?v=${encodeURIComponent(play.youtubeId)}`
-      : `${ARCHIVE_ORIGIN}/details/${encodeURIComponent(play.identifier)}`;
-  }
-
-  function sourceName(play) {
-    return isYoutubePlay(play) ? 'YouTube' : 'Internet Archive';
+  function watchUrl(play) {
+    return `https://www.youtube.com/watch?v=${encodeURIComponent(play.youtubeId)}`;
   }
 
   // Le lecteur YouTube diffuse sa position par postMessage (protocole de l'IFrame API).
@@ -367,7 +189,6 @@
     return {
       ...rawPlay,
       identifier: `youtube:${rawPlay.youtubeId}`,
-      badge: 'Vidéo',
       durationSeconds: parseDurationToSeconds(duration),
     };
   }
@@ -407,21 +228,22 @@
 
   // Les fiches gardées (favoris, à voir plus tard) peuvent venir d'un fichier importé :
   // on ne conserve que des champs connus et typés avant qu'ils atteignent le DOM ou une URL.
+  // Les fiches sans vidéo YouTube (anciens onglets Internet Archive, supprimés) sont écartées.
   function sanitizeSavedPlay(rawPlay) {
-    if (!isPlainObject(rawPlay) || typeof rawPlay.identifier !== 'string' || typeof rawPlay.title !== 'string') {
+    if (!isPlainObject(rawPlay)
+      || typeof rawPlay.title !== 'string'
+      || typeof rawPlay.youtubeId !== 'string'
+      || !YOUTUBE_ID_PATTERN.test(rawPlay.youtubeId)) {
       return null;
     }
     const savedPlay = {
-      identifier: rawPlay.identifier,
+      identifier: `youtube:${rawPlay.youtubeId}`,
+      youtubeId: rawPlay.youtubeId,
       title: rawPlay.title,
       creator: typeof rawPlay.creator === 'string' ? rawPlay.creator : '',
       year: typeof rawPlay.year === 'string' ? rawPlay.year : '',
-      badge: typeof rawPlay.badge === 'string' ? rawPlay.badge : 'Vidéo',
       savedAt: Number.isFinite(rawPlay.savedAt) ? rawPlay.savedAt : Date.now(),
     };
-    if (typeof rawPlay.youtubeId === 'string' && YOUTUBE_ID_PATTERN.test(rawPlay.youtubeId)) {
-      savedPlay.youtubeId = rawPlay.youtubeId;
-    }
     if (rawPlay.isUnofficial === true) {
       savedPlay.isUnofficial = true;
     }
@@ -721,91 +543,11 @@
     }
   }
 
-  // --- playDetailsLoader ---
-  const MAXIMUM_PARALLEL_DETAIL_REQUESTS = 4;
-
-  // Une requête par pièce : on en limite le nombre simultané pour ne pas saturer
-  // le réseau ni Internet Archive, et on met en cache pour ne jamais redemander.
-  class PlayDetailsLoader {
-    #detailsByIdentifier = new Map();
-    #pendingJobs = [];
-    #activeRequestCount = 0;
-    #abortController = new AbortController();
-
-    load(play, { isUrgent = false } = {}) {
-      if (isYoutubePlay(play)) {
-        return Promise.resolve({ durationSeconds: play.durationSeconds ?? 0, summary: play.summary ?? '' });
-      }
-
-      const cachedDetails = this.#detailsByIdentifier.get(play.identifier);
-      if (cachedDetails !== undefined) {
-        if (isUrgent) {
-          this.#moveJobToFront(play.identifier);
-        }
-        return cachedDetails;
-      }
-
-      const detailsPromise = new Promise((resolve, reject) => {
-        const job = { identifier: play.identifier, resolve, reject };
-        if (isUrgent) {
-          this.#pendingJobs.unshift(job);
-        } else {
-          this.#pendingJobs.push(job);
-        }
-      });
-      this.#detailsByIdentifier.set(play.identifier, detailsPromise);
-      this.#startPendingJobs();
-      return detailsPromise;
-    }
-
-    cancelPending() {
-      const cancelledJobs = this.#pendingJobs.splice(0);
-      cancelledJobs.forEach((job) => {
-        this.#detailsByIdentifier.delete(job.identifier);
-        job.reject(new DOMException('Chargement annulé', 'AbortError'));
-      });
-    }
-
-    destroy() {
-      this.cancelPending();
-      this.#abortController.abort();
-      this.#detailsByIdentifier.clear();
-    }
-
-    #moveJobToFront(identifier) {
-      const jobIndex = this.#pendingJobs.findIndex((job) => job.identifier === identifier);
-      if (jobIndex > 0) {
-        this.#pendingJobs.unshift(...this.#pendingJobs.splice(jobIndex, 1));
-      }
-    }
-
-    #startPendingJobs() {
-      while (this.#activeRequestCount < MAXIMUM_PARALLEL_DETAIL_REQUESTS && this.#pendingJobs.length > 0) {
-        this.#runJob(this.#pendingJobs.shift());
-      }
-    }
-
-    async #runJob(job) {
-      this.#activeRequestCount += 1;
-      try {
-        job.resolve(await fetchArchiveDetails(job.identifier, this.#abortController.signal));
-      } catch (detailsError) {
-        this.#detailsByIdentifier.delete(job.identifier);
-        job.reject(detailsError);
-      } finally {
-        this.#activeRequestCount -= 1;
-        this.#startPendingJobs();
-      }
-    }
-  }
-
-
   // --- resultsView ---
   class ResultsView {
     #gridElement;
     #cardTemplate;
     #library;
-    #detailsLoader;
     #availability;
     #onOpenPlay;
     #onPlayHidden;
@@ -816,11 +558,10 @@
     #handleGridClick = (clickEvent) => this.#onGridClick(clickEvent);
     #handleThumbnailSettled = (settledEvent) => this.#onThumbnailSettled(settledEvent);
 
-    constructor({ gridElement, cardTemplate, library, detailsLoader, availability, onOpenPlay, onPlayHidden, onPersonalToggle }) {
+    constructor({ gridElement, cardTemplate, library, availability, onOpenPlay, onPlayHidden, onPersonalToggle }) {
       this.#gridElement = gridElement;
       this.#cardTemplate = cardTemplate;
       this.#library = library;
-      this.#detailsLoader = detailsLoader;
       this.#availability = availability;
       this.#onOpenPlay = onOpenPlay;
       this.#onPlayHidden = onPlayHidden;
@@ -839,10 +580,6 @@
       this.#gridElement.replaceChildren(this.#buildCards(plays));
     }
 
-    append(plays) {
-      this.#gridElement.append(this.#buildCards(plays));
-    }
-
     showSkeleton() {
       this.#playsByIdentifier.clear();
       this.#cardsByIdentifier.clear();
@@ -856,10 +593,6 @@
 
     listDisplayedPlays() {
       return [...this.#playsByIdentifier.values()];
-    }
-
-    countDisplayedPlays() {
-      return this.#playsByIdentifier.size;
     }
 
     refreshCard(identifier) {
@@ -906,12 +639,12 @@
 
     #buildCards(plays) {
       const fragment = document.createDocumentFragment();
-      const newPlays = plays.filter((play) => !this.#playsByIdentifier.has(play.identifier));
-      newPlays.forEach((play) => {
-        this.#playsByIdentifier.set(play.identifier, play);
-        fragment.append(this.#buildCard(play));
-      });
-      newPlays.forEach((play) => this.#showDurationWhenLoaded(play));
+      plays
+        .filter((play) => !this.#playsByIdentifier.has(play.identifier))
+        .forEach((play) => {
+          this.#playsByIdentifier.set(play.identifier, play);
+          fragment.append(this.#buildCard(play));
+        });
       return fragment;
     }
 
@@ -940,6 +673,11 @@
         .filter((metaPart) => metaPart !== '')
         .join(' · ');
       cardElement.querySelector('.card-open').setAttribute('aria-label', `${play.title} : voir le résumé`);
+      if (play.durationSeconds > 0) {
+        const durationBadge = cardElement.querySelector('.card-duration');
+        durationBadge.textContent = formatDuration(play.durationSeconds);
+        durationBadge.hidden = false;
+      }
 
       this.#applyPersonalState(cardElement, play.identifier);
       this.#applyAvailability(cardElement, play.identifier);
@@ -947,28 +685,10 @@
       return cardElement;
     }
 
-    // Toutes les captations sont des vidéos : on ne signale que ce qui fait exception.
     #applyBadge(badgeElement, play) {
-      const isUnofficial = play.isUnofficial === true;
-      const isAudio = play.badge === 'Audio';
-      badgeElement.hidden = !isUnofficial && !isAudio;
-      badgeElement.textContent = isUnofficial ? 'Non officielle' : 'Audio';
-      badgeElement.classList.toggle('card-badge-unofficial', isUnofficial);
-    }
-
-    async #showDurationWhenLoaded(play) {
-      try {
-        const { durationSeconds } = await this.#detailsLoader.load(play);
-        const durationBadge = this.#cardsByIdentifier.get(play.identifier)?.querySelector('.card-duration');
-        if (durationBadge !== undefined && durationBadge !== null && durationSeconds > 0) {
-          durationBadge.textContent = formatDuration(durationSeconds);
-          durationBadge.hidden = false;
-        }
-      } catch (detailsError) {
-        if (!isAbortError(detailsError)) {
-          console.warn(`Durée indisponible pour ${play.identifier}`, detailsError);
-        }
-      }
+      badgeElement.hidden = play.isUnofficial !== true;
+      badgeElement.textContent = 'Non officielle';
+      badgeElement.classList.add('card-badge-unofficial');
     }
 
     #applyPersonalState(cardElement, identifier) {
@@ -1007,7 +727,7 @@
       }
       const cardElement = thumbnail.closest('.card');
       const play = this.#playsByIdentifier.get(cardElement?.dataset.identifier);
-      if (play === undefined || !isYoutubePlay(play)) {
+      if (play === undefined) {
         return;
       }
       const isRemovedVideo = settledEvent.type === 'error' || thumbnail.naturalWidth === REMOVED_VIDEO_THUMBNAIL_WIDTH;
@@ -1122,7 +842,6 @@
     #watchedButton;
     #closeButton;
     #library;
-    #detailsLoader;
     #availability;
     #onPersonalStateChange;
     #currentPlay = null;
@@ -1163,7 +882,7 @@
       }
     };
 
-    constructor({ dialogElement, library, detailsLoader, availability, onPersonalStateChange }) {
+    constructor({ dialogElement, library, availability, onPersonalStateChange }) {
       this.#dialogElement = dialogElement;
       this.#creatorElement = dialogElement.querySelector('#player-creator');
       this.#titleElement = dialogElement.querySelector('#player-title');
@@ -1176,7 +895,6 @@
       this.#watchedButton = dialogElement.querySelector('#player-watched');
       this.#closeButton = dialogElement.querySelector('#player-close');
       this.#library = library;
-      this.#detailsLoader = detailsLoader;
       this.#availability = availability;
       this.#onPersonalStateChange = onPersonalStateChange;
 
@@ -1194,18 +912,16 @@
       this.#currentPlay = play;
       this.#creatorElement.textContent = play.creator ?? '';
       this.#titleElement.textContent = play.title;
-      this.#sourceLink.href = detailsUrl(play);
-      this.#sourceLink.textContent = `Voir sur ${sourceName(play)} ↗`;
+      this.#sourceLink.href = watchUrl(play);
       this.#renderPersonalButtons();
-      this.#renderTags(play, play.durationSeconds ?? 0);
-      this.#summaryElement.textContent = 'Chargement du résumé…';
+      this.#renderTags(play);
+      this.#summaryElement.textContent = play.summary || 'Pas de résumé pour cette captation.';
       this.#frameWrapper.replaceChildren(this.#buildPoster(play));
 
       if (!this.#dialogElement.open) {
         this.#dialogElement.showModal();
       }
       this.#frameWrapper.querySelector('.player-launch')?.focus();
-      this.#showDetails(play);
     }
 
     destroy() {
@@ -1219,31 +935,12 @@
       this.#unloadPlayer();
     }
 
-    async #showDetails(play) {
-      try {
-        const { durationSeconds, summary } = await this.#detailsLoader.load(play, { isUrgent: true });
-        if (this.#currentPlay !== play) {
-          return;
-        }
-        this.#renderTags(play, durationSeconds);
-        this.#summaryElement.textContent = summary === '' ? 'Pas de résumé pour cette captation.' : summary;
-      } catch (detailsError) {
-        if (this.#currentPlay === play) {
-          this.#summaryElement.textContent = 'Résumé indisponible pour le moment.';
-        }
-        if (!isAbortError(detailsError)) {
-          console.warn(`Détails indisponibles pour ${play.identifier}`, detailsError);
-        }
-      }
-    }
-
-    #renderTags(play, durationSeconds) {
+    #renderTags(play) {
       const tagLabels = [
         play.year ?? '',
-        durationSeconds > 0 ? formatDuration(durationSeconds) : '',
+        play.durationSeconds > 0 ? formatDuration(play.durationSeconds) : '',
         GENRE_LABELS[play.genre] ?? '',
         LANGUAGE_LABELS[play.language] ?? '',
-        play.badge === 'Audio' ? 'Audio' : '',
       ].filter((tagLabel) => tagLabel !== '');
 
       const fragment = document.createDocumentFragment();
@@ -1287,10 +984,9 @@
     }
 
     #buildLaunchButtons(play) {
-      const progress = isYoutubePlay(play) ? this.#library.getProgress(play.identifier) : null;
-      const launchLabel = play.badge === 'Audio' ? '▶ Écouter' : '▶ Lancer la pièce';
+      const progress = this.#library.getProgress(play.identifier);
       if (progress === null || progress.seconds < MINIMUM_RESUME_SECONDS) {
-        return [this.#buildLaunchButton(launchLabel, 0, 'player-launch')];
+        return [this.#buildLaunchButton('▶ Lancer la pièce', 0, 'player-launch')];
       }
       return [
         this.#buildLaunchButton(`▶ Reprendre à ${formatDuration(progress.seconds)}`, progress.seconds, 'player-launch'),
@@ -1319,11 +1015,9 @@
       playerFrame.referrerPolicy = 'strict-origin-when-cross-origin';
       playerFrame.className = 'player-frame';
 
-      if (isYoutubePlay(this.#currentPlay)) {
-        this.#playerFrame = playerFrame;
-        playerFrame.addEventListener('load', this.#handleFrameLoad);
-        window.addEventListener('message', this.#handlePlayerMessage);
-      }
+      this.#playerFrame = playerFrame;
+      playerFrame.addEventListener('load', this.#handleFrameLoad);
+      window.addEventListener('message', this.#handlePlayerMessage);
       this.#frameWrapper.replaceChildren(playerFrame);
     }
 
@@ -1383,22 +1077,16 @@
     #library = new PersonalLibrary();
     #preferences = new Preferences();
     #availability = new VideoAvailability();
-    #detailsLoader = new PlayDetailsLoader();
     #toast;
     #resultsView;
     #resumeShelf;
     #playerDialog;
     #curatedPlays = null;
     #curatedPlaysByIdentifier = new Map();
-    #searchAbortController = null;
     #revokeTimeoutId = null;
     #state = {
-      category: CATEGORIES[0],
       searchText: '',
-      sort: 'downloads desc',
-      page: 1,
-      loadedCount: 0,
-      totalCount: 0,
+      sort: 'default',
       maskedCount: 0,
       listMode: LIST_MODES.all,
       hideWatched: false,
@@ -1435,8 +1123,6 @@
       this.#state.curatedFilters = { ...DEFAULT_CURATED_FILTERS };
       this.#onViewSettingsChanged();
     };
-    #handleTabClick = (clickEvent) => this.#selectCategory(clickEvent);
-    #handleLoadMoreClick = () => this.#loadNextPage();
     #handleSurpriseClick = () => this.#openRandomPlay();
     #handleExportClick = () => this.#exportLibrary();
     #handleImportChange = (changeEvent) => this.#importLibrary(changeEvent);
@@ -1453,7 +1139,6 @@
         gridElement: elements.resultsGrid,
         cardTemplate: elements.cardTemplate,
         library: this.#library,
-        detailsLoader: this.#detailsLoader,
         availability: this.#availability,
         onOpenPlay: openPlay,
         onPlayHidden: (play) => this.#onPlayHidden(play),
@@ -1468,7 +1153,6 @@
       this.#playerDialog = new PlayerDialog({
         dialogElement: elements.playerDialog,
         library: this.#library,
-        detailsLoader: this.#detailsLoader,
         availability: this.#availability,
         onPersonalStateChange: (identifier) => this.#onPersonalStateChange(identifier),
       });
@@ -1481,7 +1165,6 @@
       document.addEventListener('DOMContentLoaded', this.#handleDocumentReady);
       document.addEventListener('keydown', this.#handleShortcutKeydown);
 
-      this.#renderCategoryTabs();
       this.#renderExternalLinks();
       this.#renderDataControls();
       this.#syncControlsWithState();
@@ -1492,8 +1175,6 @@
       this.#elements.hideWatchedCheckbox.addEventListener('change', this.#handleHideWatchedChange);
       this.#elements.curatedFilters.addEventListener('change', this.#handleCuratedFilterChange);
       this.#elements.resetFiltersButton.addEventListener('click', this.#handleResetFiltersClick);
-      this.#elements.categoryTabs.addEventListener('click', this.#handleTabClick);
-      this.#elements.loadMoreButton.addEventListener('click', this.#handleLoadMoreClick);
       this.#elements.surpriseButton.addEventListener('click', this.#handleSurpriseClick);
       this.#elements.exportButton.addEventListener('click', this.#handleExportClick);
       this.#elements.importInput.addEventListener('change', this.#handleImportChange);
@@ -1504,7 +1185,6 @@
 
     destroy() {
       this.#debouncedSearch.cancel();
-      this.#searchAbortController?.abort();
       clearTimeout(this.#revokeTimeoutId);
       document.removeEventListener(CURATED_PLAYS_EVENT, this.#handleCuratedPlaysReceived);
       document.removeEventListener('DOMContentLoaded', this.#handleDocumentReady);
@@ -1515,8 +1195,6 @@
       this.#elements.hideWatchedCheckbox.removeEventListener('change', this.#handleHideWatchedChange);
       this.#elements.curatedFilters.removeEventListener('change', this.#handleCuratedFilterChange);
       this.#elements.resetFiltersButton.removeEventListener('click', this.#handleResetFiltersClick);
-      this.#elements.categoryTabs.removeEventListener('click', this.#handleTabClick);
-      this.#elements.loadMoreButton.removeEventListener('click', this.#handleLoadMoreClick);
       this.#elements.surpriseButton.removeEventListener('click', this.#handleSurpriseClick);
       this.#elements.exportButton.removeEventListener('click', this.#handleExportClick);
       this.#elements.importInput.removeEventListener('change', this.#handleImportChange);
@@ -1524,17 +1202,12 @@
       this.#resultsView.destroy();
       this.#resumeShelf.destroy();
       this.#playerDialog.destroy();
-      this.#detailsLoader.destroy();
       this.#toast.destroy();
     }
 
     // --- Préférences ---
     #restorePreferences() {
       const storedPreferences = this.#preferences.read();
-      const storedCategory = CATEGORIES.find((category) => category.id === storedPreferences.categoryId);
-      if (storedCategory !== undefined) {
-        this.#state.category = storedCategory;
-      }
       if (typeof storedPreferences.sort === 'string'
         && [...this.#elements.sortSelect.options].some((option) => option.value === storedPreferences.sort)) {
         this.#state.sort = storedPreferences.sort;
@@ -1556,7 +1229,6 @@
 
     #savePreferences() {
       this.#preferences.save({
-        categoryId: this.#state.category.id,
         sort: this.#state.sort,
         listMode: this.#state.listMode,
         hideWatched: this.#state.hideWatched,
@@ -1606,40 +1278,18 @@
       }
       this.#curatedPlays = [];
       if (this.#isShowingCuratedPlays()) {
-        this.#showEmptyState('La sélection n’a pas pu être chargée', 'Le fichier js/plays-data.js est introuvable ou invalide. Les autres onglets fonctionnent.');
+        this.#showEmptyState('La sélection n’a pas pu être chargée', 'Le fichier js/plays-data.js est introuvable ou invalide.');
       }
     }
 
     #isShowingCuratedPlays() {
-      return this.#state.listMode === LIST_MODES.all && this.#state.category.isCurated === true;
+      return this.#state.listMode === LIST_MODES.all;
     }
 
     // --- Rendu des contrôles ---
-    #renderCategoryTabs() {
-      const fragment = document.createDocumentFragment();
-      CATEGORIES.forEach((category) => {
-        const tabButton = document.createElement('button');
-        tabButton.type = 'button';
-        tabButton.className = 'tab';
-        tabButton.dataset.categoryId = category.id;
-        tabButton.textContent = category.label;
-        fragment.append(tabButton);
-      });
-      this.#elements.categoryTabs.replaceChildren(fragment);
-    }
-
     #renderControlsState() {
-      const isPersonalList = this.#state.listMode !== LIST_MODES.all;
-      this.#elements.categoryTabs.classList.toggle('is-disabled', isPersonalList);
-      this.#elements.categoryTabs.querySelectorAll('.tab').forEach((tabButton) => {
-        const isActive = tabButton.dataset.categoryId === this.#state.category.id;
-        tabButton.setAttribute('aria-current', String(isActive && !isPersonalList));
-        tabButton.tabIndex = isPersonalList ? -1 : 0;
-      });
       this.#elements.curatedFilters.hidden = !this.#isShowingCuratedPlays();
-      this.#elements.resultsTitle.textContent = isPersonalList
-        ? LIST_MODE_TITLES[this.#state.listMode]
-        : this.#state.category.label;
+      this.#elements.resultsTitle.textContent = LIST_MODE_TITLES[this.#state.listMode];
       this.#syncControlsWithState();
     }
 
@@ -1677,19 +1327,6 @@
       this.#resumeShelf.render(shelfEntries, { isVisible: this.#state.listMode === LIST_MODES.all });
     }
 
-    #selectCategory(clickEvent) {
-      const tabButton = clickEvent.target.closest('.tab');
-      if (tabButton === null) {
-        return;
-      }
-      const selectedCategory = CATEGORIES.find((category) => category.id === tabButton.dataset.categoryId);
-      if (selectedCategory === undefined || selectedCategory === this.#state.category) {
-        return;
-      }
-      this.#state.category = selectedCategory;
-      this.#onViewSettingsChanged();
-    }
-
     #focusSearchOnShortcut(keyboardEvent) {
       const activeElement = document.activeElement;
       const isTyping = activeElement instanceof HTMLInputElement
@@ -1705,29 +1342,15 @@
     // --- Recherche et affichage ---
     #startNewSearch() {
       this.#debouncedSearch.cancel();
-      this.#detailsLoader.cancelPending();
       this.#renderControlsState();
       this.#renderResumeShelf();
-      this.#state.page = 1;
-      this.#state.loadedCount = 0;
       this.#state.maskedCount = 0;
 
-      if (this.#state.listMode !== LIST_MODES.all) {
-        this.#searchAbortController?.abort();
-        this.#showPersonalList();
-        return;
-      }
-      if (this.#state.category.isCurated === true) {
-        this.#searchAbortController?.abort();
+      if (this.#isShowingCuratedPlays()) {
         this.#showCuratedPlays();
-        return;
+      } else {
+        this.#showPersonalList();
       }
-      this.#fetchPage({ isFirstPage: true });
-    }
-
-    #loadNextPage() {
-      this.#state.page += 1;
-      this.#fetchPage({ isFirstPage: false });
     }
 
     #isVisibleInCatalog(play) {
@@ -1743,7 +1366,6 @@
 
     #showEmptyState(title, hint) {
       this.#resultsView.replace([]);
-      this.#elements.loadMoreButton.hidden = true;
       this.#elements.emptyState.querySelector('.empty-state-title').textContent = title;
       this.#elements.emptyState.querySelector('.empty-state-hint').textContent = hint;
       this.#elements.emptyState.hidden = false;
@@ -1751,7 +1373,6 @@
     }
 
     #showCuratedPlays() {
-      this.#elements.loadMoreButton.hidden = true;
       if (this.#curatedPlays === null) {
         this.#elements.emptyState.hidden = true;
         this.#resultsView.showSkeleton();
@@ -1765,7 +1386,7 @@
       this.#state.maskedCount = matchingPlays.length - visiblePlays.length;
 
       if (visiblePlays.length === 0) {
-        this.#showEmptyState('Aucune pièce ne correspond', 'Essayez d’effacer les filtres, de changer de mot-clé ou de parcourir les autres onglets.');
+        this.#showEmptyState('Aucune pièce ne correspond', 'Essayez d’effacer les filtres ou de changer de mot-clé.');
         return;
       }
       this.#showPlays(visiblePlays, `${pluralize(visiblePlays.length, 'captation intégrale', 'captations intégrales')}${this.#describeMaskedCount()}`);
@@ -1780,7 +1401,6 @@
         this.#state.sort,
       );
       this.#state.maskedCount = matchingPlays.length - visiblePlays.length;
-      this.#elements.loadMoreButton.hidden = true;
 
       if (savedPlays.length === 0) {
         this.#showEmptyState(
@@ -1796,73 +1416,6 @@
         return;
       }
       this.#showPlays(visiblePlays, `${pluralize(visiblePlays.length, 'pièce', 'pièces')}${this.#describeMaskedCount()}`);
-    }
-
-    async #fetchPage({ isFirstPage }) {
-      // Une recherche plus récente annule la précédente pour éviter qu'une réponse
-      // lente n'écrase des résultats plus récents.
-      this.#searchAbortController?.abort();
-      const abortController = new AbortController();
-      this.#searchAbortController = abortController;
-
-      this.#elements.loadMoreButton.disabled = true;
-      if (isFirstPage) {
-        this.#elements.emptyState.hidden = true;
-        this.#elements.loadMoreButton.hidden = true;
-        this.#resultsView.showSkeleton();
-        this.#setStatus('');
-      } else {
-        this.#elements.loadMoreButton.textContent = 'Chargement…';
-      }
-
-      try {
-        const { plays, totalCount } = await searchPlays({
-          category: this.#state.category,
-          searchText: this.#state.searchText,
-          sort: this.#state.sort,
-          page: this.#state.page,
-          signal: abortController.signal,
-        });
-
-        const visiblePlays = plays.filter((play) => this.#isVisibleInCatalog(play));
-        if (isFirstPage) {
-          this.#resultsView.replace(visiblePlays);
-        } else {
-          this.#resultsView.append(visiblePlays);
-        }
-        this.#state.totalCount = totalCount;
-        this.#state.loadedCount += plays.length;
-        this.#state.maskedCount += plays.length - visiblePlays.length;
-        this.#renderPaginationState();
-      } catch (searchError) {
-        if (isAbortError(searchError)) {
-          return;
-        }
-        console.error(searchError);
-        if (isFirstPage) {
-          this.#showEmptyState('Internet Archive ne répond pas', 'Vérifiez votre connexion, puis changez d’onglet ou relancez la recherche.');
-        } else {
-          this.#state.page -= 1;
-          this.#toast.show('Impossible de charger la suite. Réessayez dans un instant.');
-        }
-      } finally {
-        if (this.#searchAbortController === abortController) {
-          this.#elements.loadMoreButton.disabled = false;
-          this.#elements.loadMoreButton.textContent = 'Charger plus';
-          this.#searchAbortController = null;
-        }
-      }
-    }
-
-    #renderPaginationState() {
-      const { loadedCount, totalCount } = this.#state;
-      this.#elements.loadMoreButton.hidden = loadedCount >= totalCount;
-      if (totalCount === 0 || this.#resultsView.countDisplayedPlays() === 0) {
-        this.#showEmptyState('Aucune pièce trouvée', 'Essayez un autre mot-clé ou une autre catégorie.');
-        return;
-      }
-      this.#elements.emptyState.hidden = true;
-      this.#setStatus(`${loadedCount} sur ${totalCount} résultats${this.#describeMaskedCount()}`);
     }
 
     #describeMaskedCount() {
@@ -1902,7 +1455,7 @@
         .filter((play) => !this.#library.isWatched(play.identifier) && !this.#availability.isUnavailable(play.identifier));
       const randomPlay = pickRandomItem(candidatePlays);
       if (randomPlay === undefined) {
-        this.#toast.show('Aucune pièce non vue à tirer au sort ici. Changez d’onglet ou de filtres.');
+        this.#toast.show('Aucune pièce non vue à tirer au sort ici. Changez de liste ou de filtres.');
         return;
       }
       this.#playerDialog.open(randomPlay);
@@ -1978,7 +1531,6 @@
 
   const rideauApp = new RideauApp({
     searchInput: queryRequiredElement('#search-input'),
-    categoryTabs: queryRequiredElement('#category-tabs'),
     sortSelect: queryRequiredElement('#sort-select'),
     listMode: queryRequiredElement('#list-mode'),
     hideWatchedCheckbox: queryRequiredElement('#hide-watched'),
@@ -1992,7 +1544,6 @@
     statusMessage: queryRequiredElement('#status-message'),
     resultsGrid: queryRequiredElement('#results-grid'),
     emptyState: queryRequiredElement('#empty-state'),
-    loadMoreButton: queryRequiredElement('#load-more'),
     externalLinksList: queryRequiredElement('#external-links-list'),
     playerDialog: queryRequiredElement('#player-dialog'),
     cardTemplate: queryRequiredElement('#card-template'),

@@ -344,48 +344,6 @@ img {
   outline-offset: 1px;
 }
 
-.tabs {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  flex: none;
-  padding: 8px 12px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--color-muted);
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.tab:hover {
-  color: var(--color-text);
-}
-
-.tab[aria-current="true"] {
-  border-bottom-color: var(--color-velvet-bright);
-  color: var(--color-text);
-}
-
-.tabs.is-disabled .tab {
-  opacity: 0.35;
-  pointer-events: none;
-}
-
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -898,12 +856,6 @@ img {
   max-width: 48ch;
   margin: 0;
   color: var(--color-muted);
-}
-
-.load-more-wrapper {
-  display: flex;
-  justify-content: center;
-  padding: 28px 0 8px;
 }
 
 /* --- Pied de page --- */

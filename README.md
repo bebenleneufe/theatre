@@ -1,56 +1,45 @@
 # Rideau 🎭
 
-Petite application personnelle pour trouver et regarder (ou écouter) des pièces de théâtre
-disponibles **gratuitement et légalement** en ligne.
+Petite application personnelle pour regarder des pièces de théâtre filmées, gratuites,
+jouées depuis 2000.
 
-Les résultats viennent de l'API publique d'[Internet Archive](https://archive.org) :
-captations filmées, théâtre radiophonique et lectures LibriVox (domaine public).
+Le catalogue est une sélection de 65 captations intégrales sur YouTube, vérifiées une à une
+(intégrables, en couleur, tournées après 2000) : 38 publiées par les théâtres et compagnies
+eux-mêmes (Odéon, Comédie-Française, Théâtre du Nord, Gecko…) et 27 mises en ligne non
+officielles, signalées par un badge orange car elles peuvent disparaître.
 
 ## Fonctionnalités
 
-- Recherche par titre, auteur ou mot-clé (Molière, Feydeau, Beckett…)
-- **Sélection récente** : 65 captations intégrales vérifiées sur YouTube, dont 38 publiées par les
-  théâtres et compagnies eux-mêmes et 27 mises en ligne non officielles (badge orange)
-  - filtres par langue, durée, genre et source
-  - les vidéos retirées de YouTube sont repérées automatiquement (carte grisée « Vidéo retirée »)
-  - **reprise de lecture** : la position est mémorisée, barre de progression sur la vignette,
-    bouton « Reprendre à 47 min » ; la pièce passe en « Vu » une fois regardée à 95 %
-- Catégories Internet Archive (depuis 2000) : théâtre filmé FR / EN, théâtre radiophonique,
-  lectures LibriVox FR / EN ; comédies musicales, « proshots » et animes exclus d'office
-- Durée sur chaque vignette, fiche avec résumé avant de lancer la pièce
-- Listes perso : favoris ☆ et « À voir plus tard », pièces vues (option pour les masquer)
-- Bouton ⊘ pour masquer définitivement un résultat sans intérêt
-- 🎲 « Surprends-moi » : ouvre une pièce non vue au hasard parmi celles affichées
+- Recherche par titre, auteur ou troupe, filtres par langue, durée, genre et source
+- Fiche avec résumé, durée et étiquettes avant de lancer la pièce
+- **Reprise de lecture** : position mémorisée, rangée « Reprendre » en haut, barre de progression
+  sur la vignette ; la pièce passe en « Vu » une fois regardée à 95 %
+- Listes perso : favoris et « À voir plus tard », pièces vues (option pour les masquer)
+- Vidéos retirées de YouTube repérées automatiquement (carte grisée « Vidéo retirée »)
+- Bouton pour masquer une pièce (avec « Annuler »), 🎲 « Surprends-moi »
+- Réglages retenus d'une visite à l'autre, raccourci `/` pour chercher
 - **Mes données** : export / import d'un fichier de sauvegarde (fusion, rien n'est effacé)
-- Liens vers d'autres plateformes gratuites (France.tv, France Culture, ARTE…)
-- Rangée « Reprendre » en haut pour les pièces commencées
-- Réglages retenus d'une visite à l'autre (onglet, filtres, tri, liste)
-- Confirmations avec « Annuler » quand on masque un résultat, raccourci `/` pour chercher
-- Thème sombre « salle obscure », pensé pour le mobile (fiche plein écran sur téléphone)
+- Liens vers d'autres plateformes gratuites (France.tv, ARTE, Comédie-Française)
+- Thème sombre « salle obscure », pensé pour le mobile
 
 ## Lancer l'application
 
 Double-cliquer sur `index.html` : c'est tout. Aucune installation, aucun serveur.
 
-(Pour récupérer les fichiers depuis GitHub : bouton **Code → Download ZIP**, puis dézipper.)
+Pour récupérer les fichiers depuis GitHub : bouton **Code → Download ZIP**, puis dézipper.
 
 ## Structure
 
 ```
 index.html          Page et gabarits HTML
-styles.css          Styles (variables de couleur, thème sombre)
-js/app.js           Toute la logique, découpée en sections : config, utils, archiveApi,
-                    playSources, curatedPlays, personalLibrary, videoAvailability,
-                    playDetailsLoader, resultsView, playerDialog, main
-js/plays-data.js    La liste des pièces de la « Sélection récente »
+styles.css          Styles (thème sombre)
+js/app.js           Toute la logique, découpée en sections : config, utils, playSources,
+                    curatedPlays, personalLibrary, preferences, toast, videoAvailability,
+                    resultsView, resumeShelf, playerDialog, main
+js/plays-data.js    La liste des pièces
 ```
 
-## Ajouter une pièce à la sélection
+## Ajouter une pièce
 
 Ajouter une entrée dans `js/plays-data.js` (l'identifiant YouTube est la fin de l'URL
-`youtube.com/watch?v=…`), en renseignant langue, genre et durée.
-
-## Ajouter une catégorie
-
-Ajouter une entrée dans `CATEGORIES` (section `config` de `js/app.js`) avec une requête au format
-[recherche avancée d'Internet Archive](https://archive.org/advancedsearch.php).
+`youtube.com/watch?v=…`), en renseignant langue, genre, durée et un résumé.

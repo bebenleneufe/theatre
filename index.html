@@ -23,7 +23,7 @@
     <div class="masthead-inner">
       <div class="brand">
         <h1 class="brand-name">Rideau<span class="brand-dot">.</span></h1>
-        <p class="brand-tagline">Théâtre filmé et radiophonique, gratuit, joué depuis 2000.</p>
+        <p class="brand-tagline">Pièces de théâtre filmées depuis 2000, en accès libre.</p>
       </div>
       <div class="search-row">
         <label class="search">
@@ -50,7 +50,6 @@
           <label><input type="radio" name="list-mode" value="favorites"><span>Favoris</span></label>
           <label><input type="radio" name="list-mode" value="watchLater"><span>À voir plus tard</span></label>
         </div>
-        <nav id="category-tabs" class="tabs" aria-label="Catégories"></nav>
       </div>
 
       <div class="toolbar">
@@ -101,7 +100,7 @@
           <label class="chip-select">
             <span class="chip-label">Tri</span>
             <select id="sort-select">
-              <option value="downloads desc">Popularité</option>
+              <option value="default">Par défaut</option>
               <option value="date desc">Plus récentes</option>
               <option value="date asc">Plus anciennes</option>
               <option value="titleSorter asc">Titre A→Z</option>
@@ -118,16 +117,13 @@
 
     <section class="results" aria-labelledby="results-title">
       <div class="results-heading">
-        <h2 id="results-title" class="section-title">Sélection récente</h2>
+        <h2 id="results-title" class="section-title">Toutes les pièces</h2>
         <p id="status-message" class="status" role="status" aria-live="polite"></p>
       </div>
       <ul id="results-grid" class="grid"></ul>
       <div id="empty-state" class="empty-state" hidden>
         <p class="empty-state-title"></p>
         <p class="empty-state-hint"></p>
-      </div>
-      <div class="load-more-wrapper">
-        <button id="load-more" class="button button-ghost" type="button" hidden>Charger plus</button>
       </div>
     </section>
   </main>
@@ -175,7 +171,7 @@
         <button id="player-favorite" class="button button-ghost" type="button" aria-pressed="false"></button>
         <button id="player-watch-later" class="button button-ghost" type="button" aria-pressed="false"></button>
         <button id="player-watched" class="button button-ghost" type="button" aria-pressed="false"></button>
-        <a id="player-source-link" class="text-button" target="_blank" rel="noopener noreferrer">Voir la source ↗</a>
+        <a id="player-source-link" class="text-button" target="_blank" rel="noopener noreferrer">Voir sur YouTube ↗</a>
       </div>
     </div>
   </dialog>
